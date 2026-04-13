@@ -52,7 +52,7 @@ st.markdown("""
         border: 1px solid #64ffda !important;
     }
     
-    /* SELECTBOX FIX - Multiple selectors for maximum coverage */
+    /* SELECTBOX FIX - Aggressive selectors for dropdown overlay */
     .stSelectbox > div > div {
         background-color: #112240 !important;
         color: #ffffff !important;
@@ -68,6 +68,29 @@ st.markdown("""
         color: #ffffff !important;
     }
     .stSelectbox label {
+        color: #ffffff !important;
+    }
+    
+    /* Dropdown menu overlay - this is the key one! */
+    [data-baseweb="select"] ul {
+        background-color: #112240 !important;
+        color: #ffffff !important;
+    }
+    [data-baseweb="select"] li {
+        background-color: #112240 !important;
+        color: #ffffff !important;
+    }
+    [data-baseweb="select"] li:hover {
+        background-color: #1d3557 !important;
+        color: #ffffff !important;
+    }
+    
+    /* Additional dropdown targeting */
+    .stSelectbox div[data-testid="stSelectboxOptions"] {
+        background-color: #112240 !important;
+    }
+    .stSelectbox div[data-testid="stSelectboxOptions"] li {
+        background-color: #112240 !important;
         color: #ffffff !important;
     }
     
@@ -383,9 +406,17 @@ def main():
         auto_detected = classify_distortion_auto(st.session_state.situation)
         st.info(f"🤖 Auto-detected: **{auto_detected}**")
         
-        # Manual selection
+        # Manual selection - REPLACE SELECTBOX WITH RADIO BUTTONS
         dist_options = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
-        selected_dist = st.selectbox("Which pattern matches best?", dist_options, key="dist_select")
+        
+        st.markdown("**Which pattern matches best?**")
+        selected_dist = st.radio(
+            "",
+            dist_options,
+            index=0,
+            horizontal=False,
+            key="dist_select"
+        )
         
         if st.button("Next: Create Healthier Thought"):
             st.session_state.distortion = selected_dist
