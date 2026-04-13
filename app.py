@@ -10,15 +10,7 @@ import os
 st.set_page_config(
     page_title="ClearLogic Engine", 
     page_icon="🧠", 
-    layout="wide",
-    theme={
-        "base": "dark",
-        "primaryColor": "#64ffda",
-        "backgroundColor": "#0a192f",
-        "secondaryBackgroundColor": "#112240",
-        "textColor": "#ffffff",
-        "font": "sans serif"
-    }
+    layout="wide"
 )
 
 # --- STYLING (High Contrast - Bright White Text) ---
