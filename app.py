@@ -211,17 +211,19 @@ def detect_distortion(text):
     best_match = max(scores, key=scores.get)
     return best_match, COGNITIVE_DISTORTIONS[best_match]
 
-def estimate_distress(text):
-    intensity_words = ["terrible", "awful", "horrible", "worst", "devastating", "unbearable", "panic", "anxiety", "rage"]
-    score = 5
-    for word in intensity_words:
-        if word in text.lower():
-            score += 1
-    return min(score, 10)
+def extract_distress_rating(text):
+    """Extract a number 0-10 from user input"""
+    text_clean = text.lower()
+    # Look for patterns like "7", "7/10", "level 7", "rating 7"
+    import re
+    match = re.search(r'\b([0-9]|10)\b', text_clean)
+    if match:
+        return int(match.group(1))
+    return None
 
 def reset_session(session_state):
     """Safely reset all session keys"""
-    keys_to_reset = ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress', 'waiting_for_reframe']
+    keys_to_reset = ['situation', 'emotion', 'initial_distress', 'thought', 'distortion', 'reframe', 'final_distress', 'waiting_for_reframe']
     for key in keys_to_reset:
         session_state.pop(key, None)
 
@@ -259,16 +261,31 @@ def generate_response(user_text, session_state):
         session_state['emotion'] = user_text
         response_parts.append(f"Got it. You're feeling **{user_text}**.")
         
-        distress_level = estimate_distress(user_text)
-        if distress_level >= 7:
-            response_parts.append(f"Your distress seems high ({distress_level}/10). Before we dive deeper, let's try a quick **Box Breathing** exercise:")
-            response_parts.append("🫁 **Box Breathing**: Inhale 4s → Hold 4s → Exhale 4s → Hold 4s. Repeat 3 times.")
-            response_parts.append("Take a moment. When ready, what's the **automatic thought** running through your mind about this situation?")
-        else:
-            response_parts.append("Now, what's the **automatic thought** or belief you have about this situation?")
+        # NEW: Ask for initial distress rating
+        response_parts.append("On a scale of **0-10**, how distressed are you right now? (0 = calm, 10 = extremely distressed)")
+        response_parts.append("(Just reply with a number like '7' or '8')")
         return "\n\n".join(response_parts)
 
-    # PHASE 2: Have situation + emotion, collect automatic thought
+    # PHASE 1.5: Have situation + emotion, collect initial distress rating
+    if not session_state.get('initial_distress'):
+        distress_rating = extract_distress_rating(user_text)
+        if distress_rating is not None:
+            session_state['initial_distress'] = distress_rating
+            response_parts.append(f"Got it - distress level: **{distress_rating}/10**.")
+            
+            # High distress intervention
+            if distress_rating >= 7:
+                response_parts.append(f"Your distress seems high. Before we dive deeper, let's try a quick **Box Breathing** exercise:")
+                response_parts.append("🫁 **Box Breathing**: Inhale 4s → Hold 4s → Exhale 4s → Hold 4s. Repeat 3 times.")
+                response_parts.append("Take a moment. When ready, what's the **automatic thought** running through your mind about this situation?")
+            else:
+                response_parts.append("Now, what's the **automatic thought** or belief you have about this situation?")
+        else:
+            # User didn't provide a number, ask again
+            response_parts.append("Could you please rate your distress on a scale of 0-10? (Just reply with a number)")
+        return "\n\n".join(response_parts)
+
+    # PHASE 2: Have situation + emotion + initial_distress, collect automatic thought
     if not session_state.get('thought'):
         session_state['thought'] = user_text
         detected_dist, dist_data = detect_distortion(user_text)
@@ -288,7 +305,7 @@ def generate_response(user_text, session_state):
         session_state['waiting_for_reframe'] = True
         return "\n\n".join(response_parts)
 
-    # PHASE 3: Have situation + emotion + thought + distortion, waiting for reframe
+    # PHASE 3: Have situation + emotion + initial_distress + thought + distortion, waiting for reframe
     if session_state.get('waiting_for_reframe') and not session_state.get('reframe'):
         session_state['reframe'] = user_text
         session_state['waiting_for_reframe'] = False
@@ -299,23 +316,24 @@ def generate_response(user_text, session_state):
 
     # PHASE 4: Have all data, waiting for final distress rating
     if session_state.get('reframe') and not session_state.get('final_distress'):
-        try:
-            final_distress = int(user_text.split()[0]) if user_text.split() and user_text.split()[0].isdigit() else 5
-        except:
-            final_distress = 5
+        final_distress = extract_distress_rating(user_text)
+        if final_distress is None:
+            final_distress = 5  # Default if not parsed
         
         session_state['final_distress'] = final_distress
-        initial_distress = estimate_distress(session_state.get('situation', ''))
+        initial_distress = session_state.get('initial_distress', 5)
         delta = initial_distress - final_distress
         
         response_parts.append("🎉 **Session Complete!**")
         response_parts.append(f"**Summary:**")
         response_parts.append(f"- Situation: {session_state.get('situation', '')[:50]}...")
         response_parts.append(f"- Emotion: {session_state.get('emotion', '')}")
+        response_parts.append(f"- Initial Distress: {initial_distress}/10")
         response_parts.append(f"- Automatic Thought: {session_state.get('thought', '')[:50]}...")
         response_parts.append(f"- Distortion: {session_state.get('distortion', 'None')}")
         response_parts.append(f"- Balanced Thought: {session_state.get('reframe', '')[:50]}...")
-        response_parts.append(f"- Distress: {initial_distress} → {final_distress} ({'Improved!' if delta > 0 else 'Same/Changed'})")
+        response_parts.append(f"- Final Distress: {final_distress}/10")
+        response_parts.append(f"- Change: {initial_distress} → {final_distress} ({'Improved!' if delta > 0 else 'Same' if delta == 0 else 'Increased'})")
         response_parts.append("")
         response_parts.append("Would you like to start a **new session**? Just describe a new situation when you're ready.")
         
@@ -354,9 +372,10 @@ with st.sidebar:
     st.markdown("**How it works:**")
     st.markdown("1. Describe what's bothering you")
     st.markdown("2. Identify your emotion")
-    st.markdown("3. AI detects distortions")
-    st.markdown("4. Practice reframing")
-    st.markdown("5. Check distress levels")
+    st.markdown("3. Rate initial distress (0-10)")
+    st.markdown("4. AI detects distortions")
+    st.markdown("5. Practice reframing")
+    st.markdown("6. Rate final distress")
 
 # Chat Interface
 for message in st.session_state.messages:
