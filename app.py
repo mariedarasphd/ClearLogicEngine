@@ -7,33 +7,109 @@ import uuid
 import os
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="ClearLogic Engine", page_icon="🧠", layout="wide")
+st.set_page_config(
+    page_title="ClearLogic Engine", 
+    page_icon="🧠", 
+    layout="wide",
+    theme={
+        "base": "dark",
+        "primaryColor": "#64ffda",
+        "backgroundColor": "#0a192f",
+        "secondaryBackgroundColor": "#112240",
+        "textColor": "#ffffff",
+        "font": "sans serif"
+    }
+)
 
 # --- STYLING (High Contrast - Bright White Text) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #0a192f; color: #ffffff !important; }
+    /* Force all text to white */
+    .stApp { 
+        background-color: #0a192f; 
+        color: #ffffff !important; 
+    }
+    
+    /* Headers and general text */
     h1, h2, h3, h4, h5, h6 { color: #ffffff !important; }
     p, span, div, li, label, button { color: #ffffff !important; }
-    .stChatMessage { background-color: #112240 !important; color: #ffffff !important; border-radius: 10px; padding: 15px; }
-    .stButton>button { background-color: #64ffda !important; color: #0a192f !important; font-weight: bold; font-size: 16px; }
-    .stButton>button:hover { background-color: #4cc9ac !important; }
-    .stTextInput input, .stTextArea textarea { color: #ffffff !important; background-color: #112240 !important; }
-    .stSelectbox select {
-        color: #ffffff !important;
+    
+    /* Chat messages */
+    .stChatMessage { 
+        background-color: #112240 !important; 
+        color: #ffffff !important; 
+        border-radius: 10px; 
+        padding: 15px; 
+    }
+    
+    /* Buttons */
+    .stButton>button { 
+        background-color: #64ffda !important; 
+        color: #0a192f !important; 
+        font-weight: bold; 
+        font-size: 16px; 
+    }
+    .stButton>button:hover { 
+        background-color: #4cc9ac !important; 
+    }
+    
+    /* Text inputs and text areas */
+    .stTextInput input, .stTextArea textarea { 
+        color: #ffffff !important; 
+        background-color: #112240 !important; 
+        border: 1px solid #64ffda !important;
+    }
+    
+    /* SELECTBOX FIX - Multiple selectors for maximum coverage */
+    .stSelectbox > div > div {
         background-color: #112240 !important;
+        color: #ffffff !important;
         border: 2px solid #64ffda !important;
+    }
+    .stSelectbox select {
+        background-color: #112240 !important;
+        color: #ffffff !important;
+        border: 2px solid #64ffda !important;
+    }
+    .stSelectbox option {
+        background-color: #112240 !important;
+        color: #ffffff !important;
     }
     .stSelectbox label {
         color: #ffffff !important;
     }
+    
+    /* Sliders */
     .stSlider label { color: #ffffff !important; }
+    
+    /* Status messages */
     .stSuccess { color: #64ffda !important; background-color: #112240 !important; }
     .stError { color: #ff6b6b !important; background-color: #112240 !important; }
     .stWarning { color: #ffd93d !important; background-color: #112240 !important; }
-    .info-box { background-color: #1d3557; padding: 15px; border-radius: 10px; border-left: 4px solid #64ffda; margin: 10px 0; }
-    .distortion-card { background-color: #112240; padding: 15px; border-radius: 8px; margin: 5px 0; border: 1px solid #233554; }
-    .debug-box { background-color: #233554; padding: 10px; border-radius: 5px; font-size: 0.8em; color: #8892b0; margin-top: 10px; }
+    
+    /* Custom boxes */
+    .info-box { 
+        background-color: #1d3557; 
+        padding: 15px; 
+        border-radius: 10px; 
+        border-left: 4px solid #64ffda; 
+        margin: 10px 0; 
+    }
+    .distortion-card { 
+        background-color: #112240; 
+        padding: 15px; 
+        border-radius: 8px; 
+        margin: 5px 0; 
+        border: 1px solid #233554; 
+    }
+    .debug-box { 
+        background-color: #233554; 
+        padding: 10px; 
+        border-radius: 5px; 
+        font-size: 0.8em; 
+        color: #8892b0; 
+        margin-top: 10px; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
