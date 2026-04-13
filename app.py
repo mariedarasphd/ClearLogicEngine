@@ -32,7 +32,7 @@ st.markdown("""
         margin-bottom: 10px;
     }
     .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
-        background-color: #1d3557 !important; /* User messages slightly lighter */
+        background-color: #1d3557 !important;
     }
     
     /* Buttons */
@@ -208,60 +208,76 @@ def detect_distortion(text):
     if not scores:
         return None, None
     
-    # Return the highest scoring distortion
     best_match = max(scores, key=scores.get)
     return best_match, COGNITIVE_DISTORTIONS[best_match]
 
 def estimate_distress(text):
-    # Simple heuristic for distress level based on intensity words
     intensity_words = ["terrible", "awful", "horrible", "worst", "devastating", "unbearable", "panic", "anxiety", "rage"]
-    score = 5 # Default neutral
+    score = 5
     for word in intensity_words:
         if word in text.lower():
             score += 1
     return min(score, 10)
 
+def get_current_phase(session_state):
+    """
+    Determine which phase of CBT we're in based on session state.
+    Returns: 0=start, 1=situation, 2=emotion, 3=thought, 4=challenge, 5=reframe, 6=complete
+    """
+    if not session_state.get('situation'):
+        return 0  # Start
+    elif not session_state.get('emotion'):
+        return 1  # Situation collected, waiting for emotion
+    elif not session_state.get('thought'):
+        return 2  # Emotion collected, waiting for automatic thought
+    elif not session_state.get('distortion'):
+        return 3  # Thought collected, analyzing distortion
+    elif not session_state.get('reframe'):
+        return 4  # Distortion identified, waiting for reframe attempt
+    elif not session_state.get('final_distress'):
+        return 5  # Reframe collected, waiting for distress check
+    else:
+        return 6  # Complete
+
 def generate_response(user_text, session_state):
     """
     Agentic Logic: Analyzes input and generates a CBT-guided response.
+    Uses phase-based state machine to avoid loops.
     """
     response_parts = []
+    current_phase = get_current_phase(session_state)
     
-    # 1. Safety Check
+    # 1. Safety Check (always first)
     if check_safety(user_text):
         return "⚠️ **Safety Alert**: I hear you are in crisis. Please call 988 or go to the ER immediately. I am here to listen, but professional help is needed right now."
 
-    # 2. Distortion Detection
-    detected_dist, dist_data = detect_distortion(user_text)
-    
-    # 3. Distress Estimation
-    distress_level = estimate_distress(user_text)
-    
-    # 4. Build Response
-    if not session_state.get('situation'):
-        # Phase 1: Establishing the Situation
+    # 2. Phase-Based Response Logic
+    if current_phase == 0:
+        # START: Collect situation
         session_state['situation'] = user_text
-        response_parts.append("Thanks for sharing that. I hear you're dealing with **[Situation]**.")
+        response_parts.append(f"Thanks for sharing that. I hear you're dealing with this situation.")
         
+        detected_dist, dist_data = detect_distortion(user_text)
         if detected_dist:
             response_parts.append(f"I notice you might be experiencing **{detected_dist}** ({dist_data['explanation']}).")
         
-        response_parts.append("How are you feeling right now about this? (e.g., Anxious, Angry, Sad)")
+        response_parts.append("How are you feeling right now about this? (e.g., Anxious, Angry, Sad, Frustrated)")
         
-    elif not session_state.get('emotion'):
-        # Phase 2: Identifying Emotion
+    elif current_phase == 1:
+        # EMOTION: Collect emotion
         session_state['emotion'] = user_text
         response_parts.append(f"Got it. You're feeling **{user_text}**.")
         
+        distress_level = estimate_distress(user_text)
         if distress_level >= 7:
-            response_parts.append(f"Your distress seems high ({distress_level}/10). Before we dive deeper, let's try a quick **Box Breathing** exercise to calm your nervous system:")
-            response_parts.append("🫁 **Box Breathing**: Inhale for 4s, Hold for 4s, Exhale for 4s, Hold for 4s. Repeat 3 times.")
-            response_parts.append("Take a moment. When you're ready, tell me: What's the most unhelpful thought running through your mind right now?")
+            response_parts.append(f"Your distress seems high ({distress_level}/10). Before we dive deeper, let's try a quick **Box Breathing** exercise:")
+            response_parts.append("🫁 **Box Breathing**: Inhale 4s → Hold 4s → Exhale 4s → Hold 4s. Repeat 3 times.")
+            response_parts.append("Take a moment. When ready, what's the **automatic thought** running through your mind about this situation?")
         else:
-            response_parts.append("Now, what's the specific thought or belief you have about this situation?")
-
-    elif not session_state.get('distortion'):
-        # Phase 3: Challenging the Thought
+            response_parts.append("Now, what's the **automatic thought** or belief you have about this situation?")
+        
+    elif current_phase == 2:
+        # THOUGHT: Collect the automatic thought
         session_state['thought'] = user_text
         detected_dist, dist_data = detect_distortion(user_text)
         
@@ -269,42 +285,59 @@ def generate_response(user_text, session_state):
             session_state['distortion'] = detected_dist
             response_parts.append(f"That sounds like **{detected_dist}**.")
             response_parts.append(f"**Why?** {dist_data['explanation']}")
-            response_parts.append(f"**Challenge:** {dist_data['reframe_prompt']}")
-            response_parts.append(f"**Intervention:** Try the **{dist_data['intervention']}** technique.")
+            response_parts.append(f"**Challenge Question:** {dist_data['reframe_prompt']}")
+            response_parts.append(f"**Try this intervention:** {dist_data['intervention']}")
+            response_parts.append("Now, write a **more balanced thought** that challenges this distortion.")
         else:
-            response_parts.append("That's an interesting thought. Let's examine it.")
+            session_state['distortion'] = "None Identified"
+            response_parts.append("That's an interesting thought. Let's examine it more closely.")
             response_parts.append("Is there any evidence that contradicts this thought? Or is there another way to look at it?")
-
-    elif not session_state.get('reframe'):
-        # Phase 4: Reframing
-        session_state['reframe'] = user_text
-        response_parts.append("Great work. That's a much more balanced perspective.")
-        response_parts.append(f"**New Thought:** '{user_text}'")
-        response_parts.append("How does your distress level feel now compared to the beginning? (0-10)")
+            response_parts.append("Try writing a more balanced version of this thought.")
         
-    else:
-        # Phase 5: Closing
+    elif current_phase == 3:
+        # CHALLENGE/REFRAME: User is providing their reframe attempt
+        session_state['reframe'] = user_text
+        response_parts.append("Great work! That's a much more balanced perspective.")
+        response_parts.append(f"**New Balanced Thought:** '{user_text}'")
+        response_parts.append("How does your distress level feel **now** compared to the beginning? (Rate 0-10)")
+        
+    elif current_phase == 4:
+        # FINAL DISTRESS: User provides final distress rating
         try:
-            final_distress = int(user_text.split()[0]) if user_text.split()[0].isdigit() else 5
+            final_distress = int(user_text.split()[0]) if user_text.split() and user_text.split()[0].isdigit() else 5
         except:
             final_distress = 5
         
+        session_state['final_distress'] = final_distress
         initial_distress = estimate_distress(session_state.get('situation', ''))
         delta = initial_distress - final_distress
         
-        response_parts.append("Session Complete! 🎉")
+        response_parts.append("🎉 **Session Complete!**")
         response_parts.append(f"**Summary:**")
-        response_parts.append(f"- Situation: {session_state['situation'][:40]}...")
+        response_parts.append(f"- Situation: {session_state['situation'][:50]}...")
         response_parts.append(f"- Emotion: {session_state['emotion']}")
+        response_parts.append(f"- Automatic Thought: {session_state['thought'][:50]}...")
         response_parts.append(f"- Distortion: {session_state.get('distortion', 'None')}")
-        response_parts.append(f"- New Thought: {session_state['reframe'][:40]}...")
-        response_parts.append(f"- Distress: {initial_distress} → {final_distress} ({'Improved' if delta > 0 else 'Same/Changed'})")
-        response_parts.append("Would you like to start a new session?")
+        response_parts.append(f"- Balanced Thought: {session_state['reframe'][:50]}...")
+        response_parts.append(f"- Distress: {initial_distress} → {final_distress} ({'Improved!' if delta > 0 else 'Same/Changed'})")
+        response_parts.append("")
+        response_parts.append("Would you like to start a **new session**? Just describe a new situation when you're ready.")
         
         # Reset state for next session
-        for key in ['situation', 'emotion', 'distortion', 'thought', 'reframe']:
+        for key in ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress']:
             session_state.pop(key, None)
-
+        
+    elif current_phase == 5:
+        # COMPLETE: User wants to start fresh
+        response_parts.append("Great! Let's start fresh.")
+        response_parts.append("Tell me about a new situation that's bothering you.")
+        session_state.pop('situation', None)
+        session_state.pop('emotion', None)
+        session_state.pop('thought', None)
+        session_state.pop('distortion', None)
+        session_state.pop('reframe', None)
+        session_state.pop('final_distress', None)
+    
     return "\n\n".join(response_parts)
 
 # --- SESSION STATE INITIALIZATION ---
@@ -323,18 +356,17 @@ with st.sidebar:
     st.header("Controls")
     if st.button("Reset Session"):
         st.session_state.messages = []
-        st.session_state.session_active = False
-        for key in ['situation', 'emotion', 'distortion', 'thought', 'reframe']:
+        for key in ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress']:
             st.session_state.pop(key, None)
         st.rerun()
     
     st.markdown("---")
     st.markdown("**How it works:**")
-    st.markdown("1. Describe what's bothering you.")
-    st.markdown("2. Identify your emotion.")
-    st.markdown("3. The AI detects distortions.")
-    st.markdown("4. Practice reframing.")
-    st.markdown("5. Check distress levels.")
+    st.markdown("1. Describe what's bothering you")
+    st.markdown("2. Identify your emotion")
+    st.markdown("3. AI detects distortions")
+    st.markdown("4. Practice reframing")
+    st.markdown("5. Check distress levels")
 
 # Chat Interface
 for message in st.session_state.messages:
