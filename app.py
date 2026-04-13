@@ -52,7 +52,7 @@ st.markdown("""
         border: 1px solid #64ffda !important;
     }
     
-    /* SELECTBOX FIX - Aggressive selectors for dropdown overlay */
+    /* SELECTBOX FIX */
     .stSelectbox > div > div {
         background-color: #112240 !important;
         color: #ffffff !important;
@@ -71,7 +71,7 @@ st.markdown("""
         color: #ffffff !important;
     }
     
-    /* Dropdown menu overlay - this is the key one! */
+    /* Dropdown menu overlay */
     [data-baseweb="select"] ul {
         background-color: #112240 !important;
         color: #ffffff !important;
@@ -123,6 +123,11 @@ st.markdown("""
         border-left: 3px solid #64ffda;
         background-color: #112240;
         border-radius: 4px;
+        transition: all 0.2s;
+    }
+    .distortion-option.selected {
+        background-color: #1d3557;
+        border-left: 3px solid #64ffda;
     }
     .debug-box { 
         background-color: #233554; 
@@ -266,7 +271,6 @@ EMOTIONS = [
 ]
 
 # --- SAFETY KEYWORDS (Updated for Intent Detection) ---
-# Instead of single words like "die", we look for phrases indicating intent to self-harm
 SELF_HARM_PHRASES = [
     "want to kill myself", "want to die", "going to kill myself", "going to die",
     "end my life", "end it all", "suicide", "commit suicide", "take my own life",
@@ -279,10 +283,6 @@ INTENT_INDICATORS = ["want to", "going to", "planning to", "thinking about", "re
 DEATH_WORDS = ["kill", "die", "dead", "end it", "suicide", "overdose", "hurt myself"]
 
 def check_safety(text):
-    """
-    Checks for self-harm intent with reduced false positives.
-    Returns True if high risk is detected.
-    """
     text_lower = text.lower()
     
     # 1. Check for explicit self-harm phrases first
@@ -291,7 +291,6 @@ def check_safety(text):
             return True
             
     # 2. Contextual check: Look for intent indicators + death/harm words
-    # This catches variations like "I am planning to die" without catching "My grandma died"
     has_intent = any(ind in text_lower for ind in INTENT_INDICATORS)
     has_harm_word = any(word in text_lower for word in DEATH_WORDS)
     
@@ -310,7 +309,7 @@ def classify_distortion_auto(text):
         return "None Identified"
     return max(scores, key=scores.get)
 
-# --- SESSION STATE ---
+# --- SESSION STATE INITIALIZATION ---
 if 'session_started' not in st.session_state:
     st.session_state.session_started = False
 if 'user_id' not in st.session_state:
@@ -333,8 +332,15 @@ if 'distress_post' not in st.session_state:
     st.session_state.distress_post = None
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-if 'selected_distortion_key' not in st.session_state:
-    st.session_state.selected_distortion_key = None
+if 'current_dist_selection' not in st.session_state:
+    st.session_state.current_dist_selection = None
+
+# Initialize all distortion checkbox keys to False to prevent dynamic key errors
+DISTORTION_OPTIONS = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
+for opt in DISTORTION_OPTIONS:
+    key = f"cb_{opt}"
+    if key not in st.session_state:
+        st.session_state[key] = False
 
 # --- APP LOGIC ---
 
@@ -446,7 +452,7 @@ def main():
             st.rerun()
         return
 
-    # 5. STEP 3: DISTORTION (UPDATED: Checkboxes with Explanations)
+    # 5. STEP 3: DISTORTION (FIXED: Safe Checkbox Logic)
     if st.session_state.step == "distortion":
         st.title("Step 3: Identify the Cognitive Distortion")
         st.markdown(f"**Situation:** {st.session_state.situation}")
@@ -458,15 +464,10 @@ def main():
         
         st.markdown("**Which pattern matches best? (Select one)**")
         
-        dist_options = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
         selected_dist = None
         
-        # Create a unique key for the group of checkboxes to ensure only one is "active" logically
-        # We use a single state variable to track the selection
-        if 'current_dist_selection' not in st.session_state:
-            st.session_state.current_dist_selection = None
-
-        for i, dist_name in enumerate(dist_options):
+        # Render options
+        for i, dist_name in enumerate(DISTORTION_OPTIONS):
             # Determine explanation
             if dist_name == "None Identified":
                 explanation = "No clear cognitive distortion pattern identified"
@@ -480,28 +481,47 @@ def main():
             col1, col2 = st.columns([0.5, 5.5])
             
             with col1:
-                # Use a callback or manual check to update selection
-                is_selected = st.session_state.get(cb_key, False)
+                # Get current state
+                current_val = st.session_state.get(cb_key, False)
                 
-                # We use a trick: if the user clicks this, we clear all others and set this one
-                if st.checkbox("", key=cb_key, value=is_selected):
-                    # Clear all other selections
-                    for opt in dist_options:
+                # If this checkbox is clicked, we need to deselect all others
+                # We do this by checking if it's currently unchecked and the user clicks it
+                # But Streamlit re-renders, so we use a callback-like pattern via session state logic
+                
+                # Simple approach: If the user clicks this checkbox, we set it to True and others to False
+                # However, we can't do that inside the render loop easily without causing errors.
+                # Instead, we use a helper: if the user clicks, we set a temporary 'clicked_key'
+                # and then process it after the loop.
+                
+                # Actually, the cleanest way in Streamlit for single-select checkboxes is:
+                # Check if this specific box is checked. If so, set current_dist_selection to this name.
+                # Then, in the next render, we ensure only this one is checked.
+                
+                # To avoid the "dynamic key" error, we rely on the fact that we initialized all keys above.
+                
+                is_checked = st.checkbox("", key=cb_key, value=current_val)
+                
+                if is_checked:
+                    # If this one is checked, set it as the selection
+                    st.session_state.current_dist_selection = dist_name
+                    
+                    # IMPORTANT: We must uncheck all OTHER boxes immediately in the same run
+                    # But we can't modify session_state keys dynamically in a loop that is currently rendering?
+                    # Actually, we can if we iterate the known list.
+                    for opt in DISTORTION_OPTIONS:
                         if opt != dist_name:
                             st.session_state[f"cb_{opt}"] = False
-                    st.session_state.current_dist_selection = dist_name
-                    st.session_state[cb_key] = True
-                elif not is_selected and st.session_state.current_dist_selection == dist_name:
-                     # Ensure consistency if state got weird
-                     st.session_state[cb_key] = True
+                    # Force a rerun to update the UI state cleanly
+                    st.rerun()
 
             with col2:
-                # Visual feedback for selection
-                bg_color = "#1d3557" if st.session_state.current_dist_selection == dist_name else "#112240"
-                border_color = "#64ffda" if st.session_state.current_dist_selection == dist_name else "#233554"
+                # Visual feedback
+                is_selected = (st.session_state.current_dist_selection == dist_name)
+                bg_color = "#1d3557" if is_selected else "#112240"
+                border_color = "#64ffda" if is_selected else "#233554"
                 
                 st.markdown(f"""
-                <div class="distortion-option" style="background-color: {bg_color}; border-left-color: {border_color};">
+                <div class="distortion-option {'selected' if is_selected else ''}" style="background-color: {bg_color}; border-left-color: {border_color};">
                     <strong>{dist_name}</strong><br>
                     <small style="color: #8892b0;">{explanation}</small>
                 </div>
@@ -580,9 +600,11 @@ def main():
             st.session_state.distress_pre = None
             st.session_state.distress_post = None
             st.session_state.current_dist_selection = None
-            # Reset checkboxes
-            for opt in ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys()):
+            
+            # Reset all checkboxes
+            for opt in DISTORTION_OPTIONS:
                 st.session_state[f"cb_{opt}"] = False
+            
             st.rerun()
         return
 
