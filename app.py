@@ -117,6 +117,13 @@ st.markdown("""
         margin: 5px 0; 
         border: 1px solid #233554; 
     }
+    .distortion-option {
+        padding: 10px;
+        margin-bottom: 10px;
+        border-left: 3px solid #64ffda;
+        background-color: #112240;
+        border-radius: 4px;
+    }
     .debug-box { 
         background-color: #233554; 
         padding: 10px; 
@@ -135,94 +142,109 @@ if os.path.exists(LOGO_PATH):
 else:
     st.warning("⚠️ Logo 'logo.png' not found.")
 
-# --- 15 COGNITIVE DISTORTIONS (From Your Document) ---
+# --- 15 COGNITIVE DISTORTIONS (Updated with Explanations) ---
 COGNITIVE_DISTORTIONS = {
     "Filtering": {
         "definition": "Taking negative details and magnifying them while filtering out all positive aspects.",
+        "explanation": "Focusing only on the bad parts and ignoring the good ones.",
         "example": "Dwelling on one criticism while ignoring all praise.",
         "keywords": ["only", "but", "ignoring", "positive", "negative", "focus on"],
         "reframe": "What are 3 positive aspects you're overlooking in this situation?"
     },
     "Polarized Thinking": {
         "definition": "Things are either black-or-white. No middle ground. Perfect or failure.",
+        "explanation": "Seeing things as all good or all bad, with no middle ground.",
         "example": "If I'm not perfect, I'm a total failure.",
         "keywords": ["perfect", "failure", "all or nothing", "either or", "total", "complete"],
         "reframe": "Where is the middle ground? What's a more realistic standard?"
     },
     "Overgeneralization": {
         "definition": "General conclusion based on a single incident. One bad event = never-ending pattern.",
+        "explanation": "Assuming one bad event means it will always happen.",
         "example": "Something bad happened once, so it will always happen.",
         "keywords": ["always", "never", "every time", "everyone", "no one", "all", "none"],
         "reframe": "Is this truly always, or is there an exception?"
     },
     "Jumping to Conclusions": {
         "definition": "Knowing what others feel/think without evidence. Mind reading or fortune telling.",
+        "explanation": "Assuming you know what others are thinking without proof.",
         "example": "They're reacting negatively toward me (without asking).",
         "keywords": ["they think", "they feel", "they know", "they want", "they don't", "surely"],
         "reframe": "What evidence do I have? What else could explain this?"
     },
     "Catastrophizing": {
         "definition": "Expecting disaster. Magnifying problems or minimizing positives.",
+        "explanation": "Expecting the worst possible outcome to happen.",
         "example": "What if tragedy strikes? This is the worst thing ever.",
         "keywords": ["worst", "disaster", "terrible", "horrible", "can't stand", "ruined", "gone"],
         "reframe": "What's the most realistic outcome? What's the worst that could actually happen?"
     },
     "Personalization": {
         "definition": "Everything others do/say is a reaction to us. Comparing ourselves to others.",
+        "explanation": "Blaming yourself for things outside your control.",
         "example": "The hostess overcooked because I was late (when I wasn't responsible).",
         "keywords": ["my fault", "because of me", "I caused", "they're mad at me", "I made"],
         "reframe": "What factors were outside my control? What else could have caused this?"
     },
     "Control Fallacies": {
         "definition": "Feeling externally controlled (helpless) or internally controlling (responsible for others' happiness).",
+        "explanation": "Feeling powerless or feeling responsible for everyone else's feelings.",
         "example": "I can't help it (external) OR Why aren't you happy? (internal)",
         "keywords": ["can't help", "helpless", "victim", "responsible for", "make me", "have to"],
         "reframe": "What is actually within my control right now?"
     },
     "Fallacy of Fairness": {
         "definition": "Resentment from measuring situations against a 'fairness' ruler that others won't agree with.",
+        "explanation": "Getting upset because life doesn't feel fair to you.",
         "example": "Life is always fair (but it's not).",
         "keywords": ["fair", "unfair", "should", "deserve", "right", "wrong", "justice"],
         "reframe": "Is life always fair? What would help me accept this situation?"
     },
     "Blaming": {
         "definition": "Holding others responsible for pain OR blaming ourselves for everything.",
+        "explanation": "Pointing fingers at others or yourself instead of looking at the whole picture.",
         "example": "Stop making me feel bad! OR This is all my fault.",
         "keywords": ["you made me", "your fault", "my fault", "blame", "responsible", "caused"],
         "reframe": "Who actually controls my emotions? What part can I influence?"
     },
     "Shoulds": {
         "definition": "Ironclad rules about how others/we should behave. Guilt when violated.",
+        "explanation": "Having strict rules about how you or others 'must' act.",
         "example": "I should exercise. I shouldn't be so lazy.",
         "keywords": ["should", "shouldn't", "must", "ought", "have to", "need to"],
         "reframe": "What would happen if I dropped this rule? Is it flexible?"
     },
     "Emotional Reasoning": {
         "definition": "Believing what we feel must be true automatically. 'I feel it, therefore it's true.'",
+        "explanation": "Thinking your feelings are facts.",
         "example": "I feel stupid, so I must be stupid.",
         "keywords": ["I feel", "because I feel", "therefore", "must be", "obviously", "clearly"],
         "reframe": "Are feelings facts? What evidence contradicts this feeling?"
     },
     "Fallacy of Change": {
         "definition": "Expecting others to change if we pressure them enough. Happiness depends on them.",
+        "explanation": "Thinking you can force someone to change if you push hard enough.",
         "example": "If I just push hard enough, they'll change.",
         "keywords": ["if they would", "if only they", "change them", "make them", "pressure"],
         "reframe": "Can I control their change? What can I control about my response?"
     },
     "Global Labeling": {
         "definition": "Generalizing one/two qualities into a negative global judgment. Mislabeling.",
+        "explanation": "Calling yourself or others a negative label like 'loser' or 'jerk'.",
         "example": "I'm a loser. He's a real jerk.",
         "keywords": ["loser", "jerk", "idiot", "worthless", "useless", "disappointment", "stupid"],
         "reframe": "Can I describe this more specifically without the label?"
     },
     "Always Being Right": {
         "definition": "Continually on trial to prove opinions/actions correct. Being wrong is unthinkable.",
+        "explanation": "Needing to win every argument to feel okay.",
         "example": "I'm going to win this argument no matter what.",
         "keywords": ["right", "wrong", "prove", "correct", "argument", "win", "defend"],
         "reframe": "Is being right more important than the relationship?"
     },
     "Heaven's Reward Fallacy": {
         "definition": "Expecting sacrifices to be rewarded. Resentment when they aren't.",
+        "explanation": "Feeling bitter because your hard work hasn't been recognized yet.",
         "example": "I've done so much, I deserve recognition.",
         "keywords": ["deserve", "reward", "sacrifice", "earned", "owed", "after all I've done"],
         "reframe": "Can I find satisfaction in the action itself, not the reward?"
@@ -243,8 +265,50 @@ EMOTIONS = [
     {"emoji": "😌", "label": "Calm"}
 ]
 
-# --- SAFETY KEYWORDS ---
-SAFETY_KEYWORDS = ["suicide", "kill myself", "end it", "die", "overdose", "hurt someone", "firearm", "gun", "cutting", "self-harm"]
+# --- SAFETY KEYWORDS (Updated for Intent Detection) ---
+# Instead of single words like "die", we look for phrases indicating intent to self-harm
+SELF_HARM_PHRASES = [
+    "want to kill myself", "want to die", "going to kill myself", "going to die",
+    "end my life", "end it all", "suicide", "commit suicide", "take my own life",
+    "hurt myself", "hurt myself badly", "cut myself", "overdose", "jump off",
+    "shoot myself", "hang myself", "poison myself", "no reason to live",
+    "better off dead", "wish I was dead", "can't go on anymore", "give up on life"
+]
+
+INTENT_INDICATORS = ["want to", "going to", "planning to", "thinking about", "ready to", "about to"]
+DEATH_WORDS = ["kill", "die", "dead", "end it", "suicide", "overdose", "hurt myself"]
+
+def check_safety(text):
+    """
+    Checks for self-harm intent with reduced false positives.
+    Returns True if high risk is detected.
+    """
+    text_lower = text.lower()
+    
+    # 1. Check for explicit self-harm phrases first
+    for phrase in SELF_HARM_PHRASES:
+        if phrase in text_lower:
+            return True
+            
+    # 2. Contextual check: Look for intent indicators + death/harm words
+    # This catches variations like "I am planning to die" without catching "My grandma died"
+    has_intent = any(ind in text_lower for ind in INTENT_INDICATORS)
+    has_harm_word = any(word in text_lower for word in DEATH_WORDS)
+    
+    if has_intent and has_harm_word:
+        return True
+        
+    return False
+
+def classify_distortion_auto(text):
+    text_lower = text.lower()
+    scores = {}
+    for dist_name, dist_data in COGNITIVE_DISTORTIONS.items():
+        matches = sum(1 for kw in dist_data["keywords"] if kw in text_lower)
+        scores[dist_name] = matches
+    if max(scores.values()) == 0:
+        return "None Identified"
+    return max(scores, key=scores.get)
 
 # --- SESSION STATE ---
 if 'session_started' not in st.session_state:
@@ -269,22 +333,8 @@ if 'distress_post' not in st.session_state:
     st.session_state.distress_post = None
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-
-# --- FUNCTIONS ---
-
-def check_safety(text):
-    text_lower = text.lower()
-    return any(keyword in text_lower for keyword in SAFETY_KEYWORDS)
-
-def classify_distortion_auto(text):
-    text_lower = text.lower()
-    scores = {}
-    for dist_name, dist_data in COGNITIVE_DISTORTIONS.items():
-        matches = sum(1 for kw in dist_data["keywords"] if kw in text_lower)
-        scores[dist_name] = matches
-    if max(scores.values()) == 0:
-        return "None Identified"
-    return max(scores, key=scores.get)
+if 'selected_distortion_key' not in st.session_state:
+    st.session_state.selected_distortion_key = None
 
 # --- APP LOGIC ---
 
@@ -316,7 +366,7 @@ def main():
                     st.markdown(f"""
                     <div class="distortion-card">
                         <strong>{dist_name}</strong><br>
-                        <small>{dist_data['definition'][:60]}...</small>
+                        <small>{dist_data['explanation']}</small>
                     </div>
                     """, unsafe_allow_html=True)
         
@@ -396,7 +446,7 @@ def main():
             st.rerun()
         return
 
-    # 5. STEP 3: DISTORTION
+    # 5. STEP 3: DISTORTION (UPDATED: Checkboxes with Explanations)
     if st.session_state.step == "distortion":
         st.title("Step 3: Identify the Cognitive Distortion")
         st.markdown(f"**Situation:** {st.session_state.situation}")
@@ -406,22 +456,64 @@ def main():
         auto_detected = classify_distortion_auto(st.session_state.situation)
         st.info(f"🤖 Auto-detected: **{auto_detected}**")
         
-        # Manual selection - REPLACE SELECTBOX WITH RADIO BUTTONS
+        st.markdown("**Which pattern matches best? (Select one)**")
+        
         dist_options = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
+        selected_dist = None
         
-        st.markdown("**Which pattern matches best?**")
-        selected_dist = st.radio(
-            "",
-            dist_options,
-            index=0,
-            horizontal=False,
-            key="dist_select"
-        )
-        
+        # Create a unique key for the group of checkboxes to ensure only one is "active" logically
+        # We use a single state variable to track the selection
+        if 'current_dist_selection' not in st.session_state:
+            st.session_state.current_dist_selection = None
+
+        for i, dist_name in enumerate(dist_options):
+            # Determine explanation
+            if dist_name == "None Identified":
+                explanation = "No clear cognitive distortion pattern identified"
+            else:
+                explanation = COGNITIVE_DISTORTIONS[dist_name]["explanation"]
+            
+            # Unique key for this checkbox
+            cb_key = f"cb_{dist_name}"
+            
+            # Layout: Checkbox on left, Explanation on right
+            col1, col2 = st.columns([0.5, 5.5])
+            
+            with col1:
+                # Use a callback or manual check to update selection
+                is_selected = st.session_state.get(cb_key, False)
+                
+                # We use a trick: if the user clicks this, we clear all others and set this one
+                if st.checkbox("", key=cb_key, value=is_selected):
+                    # Clear all other selections
+                    for opt in dist_options:
+                        if opt != dist_name:
+                            st.session_state[f"cb_{opt}"] = False
+                    st.session_state.current_dist_selection = dist_name
+                    st.session_state[cb_key] = True
+                elif not is_selected and st.session_state.current_dist_selection == dist_name:
+                     # Ensure consistency if state got weird
+                     st.session_state[cb_key] = True
+
+            with col2:
+                # Visual feedback for selection
+                bg_color = "#1d3557" if st.session_state.current_dist_selection == dist_name else "#112240"
+                border_color = "#64ffda" if st.session_state.current_dist_selection == dist_name else "#233554"
+                
+                st.markdown(f"""
+                <div class="distortion-option" style="background-color: {bg_color}; border-left-color: {border_color};">
+                    <strong>{dist_name}</strong><br>
+                    <small style="color: #8892b0;">{explanation}</small>
+                </div>
+                """, unsafe_allow_html=True)
+
         if st.button("Next: Create Healthier Thought"):
-            st.session_state.distortion = selected_dist
-            st.session_state.step = "reframe"
-            st.rerun()
+            if st.session_state.current_dist_selection:
+                st.session_state.distortion = st.session_state.current_dist_selection
+                st.session_state.step = "reframe"
+                st.rerun()
+            else:
+                st.warning("Please select a distortion pattern.")
         return
 
     # 6. STEP 4: REFRAME
@@ -487,6 +579,10 @@ def main():
             st.session_state.reframe = ""
             st.session_state.distress_pre = None
             st.session_state.distress_post = None
+            st.session_state.current_dist_selection = None
+            # Reset checkboxes
+            for opt in ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys()):
+                st.session_state[f"cb_{opt}"] = False
             st.rerun()
         return
 
