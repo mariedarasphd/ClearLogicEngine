@@ -3,8 +3,8 @@ import pandas as pd
 import numpy as np
 from scipy import stats
 import hashlib
-import uuid
 import os
+import random
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -13,25 +13,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- STYLING (High Contrast - Bright White Text) ---
+# --- STYLING ---
 st.markdown("""
 <style>
-    /* Force all text to white */
     .stApp { 
         background-color: #0a192f; 
         color: #ffffff !important; 
     }
-    
-    /* Headers and general text */
     h1, h2, h3, h4, h5, h6 { color: #ffffff !important; }
     p, span, div, li, label, button { color: #ffffff !important; }
     
-    /* Chat messages */
+    /* Chat Messages */
     .stChatMessage { 
         background-color: #112240 !important; 
         color: #ffffff !important; 
         border-radius: 10px; 
         padding: 15px; 
+        margin-bottom: 10px;
+    }
+    .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
+        background-color: #1d3557 !important; /* User messages slightly lighter */
     }
     
     /* Buttons */
@@ -45,59 +46,14 @@ st.markdown("""
         background-color: #4cc9ac !important; 
     }
     
-    /* Text inputs and text areas */
+    /* Input */
     .stTextInput input, .stTextArea textarea { 
         color: #ffffff !important; 
         background-color: #112240 !important; 
         border: 1px solid #64ffda !important;
     }
     
-    /* Radio button styling */
-    .stRadio > label { color: #ffffff !important; }
-    .stRadio > div { color: #ffffff !important; }
-    
-    /* SELECTBOX FIX */
-    .stSelectbox > div > div {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-        border: 2px solid #64ffda !important;
-    }
-    .stSelectbox select {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-        border: 2px solid #64ffda !important;
-    }
-    .stSelectbox option {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-    }
-    .stSelectbox label {
-        color: #ffffff !important;
-    }
-    
-    /* Dropdown menu overlay */
-    [data-baseweb="select"] ul {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-    }
-    [data-baseweb="select"] li {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-    }
-    [data-baseweb="select"] li:hover {
-        background-color: #1d3557 !important;
-        color: #ffffff !important;
-    }
-    
-    /* Sliders */
-    .stSlider label { color: #ffffff !important; }
-    
-    /* Status messages */
-    .stSuccess { color: #64ffda !important; background-color: #112240 !important; }
-    .stError { color: #ff6b6b !important; background-color: #112240 !important; }
-    .stWarning { color: #ffd93d !important; background-color: #112240 !important; }
-    
-    /* Custom boxes */
+    /* Info Boxes */
     .info-box { 
         background-color: #1d3557; 
         padding: 15px; 
@@ -105,27 +61,12 @@ st.markdown("""
         border-left: 4px solid #64ffda; 
         margin: 10px 0; 
     }
-    .distortion-card { 
-        background-color: #112240; 
-        padding: 15px; 
-        border-radius: 8px; 
-        margin: 5px 0; 
-        border: 1px solid #233554; 
-    }
-    .distortion-option {
-        padding: 10px;
-        margin-bottom: 10px;
-        border-left: 3px solid #64ffda;
+    .intervention-card {
         background-color: #112240;
-        border-radius: 4px;
-    }
-    .debug-box { 
-        background-color: #233554; 
-        padding: 10px; 
-        border-radius: 5px; 
-        font-size: 0.8em; 
-        color: #8892b0; 
-        margin-top: 10px; 
+        border: 2px solid #64ffda;
+        padding: 15px;
+        border-radius: 10px;
+        margin: 15px 0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -137,130 +78,101 @@ if os.path.exists(LOGO_PATH):
 else:
     st.warning("⚠️ Logo 'logo.png' not found.")
 
-# --- 15 COGNITIVE DISTORTIONS (Updated with Explanations) ---
+# --- DATA DEFINITIONS ---
 COGNITIVE_DISTORTIONS = {
     "Filtering": {
-        "definition": "Taking negative details and magnifying them while filtering out all positive aspects.",
-        "explanation": "Focusing only on the bad parts and ignoring the good ones.",
-        "example": "Dwelling on one criticism while ignoring all praise.",
         "keywords": ["only", "but", "ignoring", "positive", "negative", "focus on"],
-        "reframe": "What are 3 positive aspects you're overlooking in this situation?"
+        "explanation": "Focusing only on the bad parts and ignoring the good ones.",
+        "reframe_prompt": "Can you list 3 positive aspects you might be overlooking?",
+        "intervention": "Focus on the evidence: Write down 3 things that went well today."
     },
     "Polarized Thinking": {
-        "definition": "Things are either black-or-white. No middle ground. Perfect or failure.",
-        "explanation": "Seeing things as all good or all bad, with no middle ground.",
-        "example": "If I'm not perfect, I'm a total failure.",
         "keywords": ["perfect", "failure", "all or nothing", "either or", "total", "complete"],
-        "reframe": "Where is the middle ground? What's a more realistic standard?"
+        "explanation": "Seeing things as all good or all bad, with no middle ground.",
+        "reframe_prompt": "Where is the middle ground? What's a more realistic standard?",
+        "intervention": "The Continuum Technique: Rate the situation on a scale of 0-100 instead of pass/fail."
     },
     "Overgeneralization": {
-        "definition": "General conclusion based on a single incident. One bad event = never-ending pattern.",
-        "explanation": "Assuming one bad event means it will always happen.",
-        "example": "Something bad happened once, so it will always happen.",
         "keywords": ["always", "never", "every time", "everyone", "no one", "all", "none"],
-        "reframe": "Is this truly always, or is there an exception?"
+        "explanation": "Assuming one bad event means it will always happen.",
+        "reframe_prompt": "Is this truly 'always', or is there an exception?",
+        "intervention": "Evidence Log: Find one counter-example to this 'always' statement."
     },
     "Jumping to Conclusions": {
-        "definition": "Knowing what others feel/think without evidence. Mind reading or fortune telling.",
-        "explanation": "Assuming you know what others are thinking without proof.",
-        "example": "They're reacting negatively toward me (without asking).",
         "keywords": ["they think", "they feel", "they know", "they want", "they don't", "surely"],
-        "reframe": "What evidence do I have? What else could explain this?"
+        "explanation": "Assuming you know what others are thinking without proof.",
+        "reframe_prompt": "What evidence do I have? What else could explain this?",
+        "intervention": "The Courtroom Test: If this were a court case, would the evidence hold up?"
     },
     "Catastrophizing": {
-        "definition": "Expecting disaster. Magnifying problems or minimizing positives.",
-        "explanation": "Expecting the worst possible outcome to happen.",
-        "example": "What if tragedy strikes? This is the worst thing ever.",
         "keywords": ["worst", "disaster", "terrible", "horrible", "can't stand", "ruined", "gone"],
-        "reframe": "What's the most realistic outcome? What's the worst that could actually happen?"
+        "explanation": "Expecting the worst possible outcome to happen.",
+        "reframe_prompt": "What's the most realistic outcome? What's the worst that could actually happen?",
+        "intervention": "Decatastrophizing: If the worst happened, how would you cope? What resources do you have?"
     },
     "Personalization": {
-        "definition": "Everything others do/say is a reaction to us. Comparing ourselves to others.",
-        "explanation": "Blaming yourself for things outside your control.",
-        "example": "The hostess overcooked because I was late (when I wasn't responsible).",
         "keywords": ["my fault", "because of me", "I caused", "they're mad at me", "I made"],
-        "reframe": "What factors were outside my control? What else could have caused this?"
+        "explanation": "Blaming yourself for things outside your control.",
+        "reframe_prompt": "What factors were outside my control? What else could have caused this?",
+        "intervention": "Pie Chart: Draw a pie chart of all factors contributing to the event."
     },
     "Control Fallacies": {
-        "definition": "Feeling externally controlled (helpless) or internally controlling (responsible for others' happiness).",
-        "explanation": "Feeling powerless or feeling responsible for everyone else's feelings.",
-        "example": "I can't help it (external) OR Why aren't you happy? (internal)",
         "keywords": ["can't help", "helpless", "victim", "responsible for", "make me", "have to"],
-        "reframe": "What is actually within my control right now?"
+        "explanation": "Feeling powerless or feeling responsible for everyone else's feelings.",
+        "reframe_prompt": "What is actually within my control right now?",
+        "intervention": "Circle of Control: Draw a circle. Inside: things you control. Outside: things you don't."
     },
     "Fallacy of Fairness": {
-        "definition": "Resentment from measuring situations against a 'fairness' ruler that others won't agree with.",
-        "explanation": "Getting upset because life doesn't feel fair to you.",
-        "example": "Life is always fair (but it's not).",
         "keywords": ["fair", "unfair", "should", "deserve", "right", "wrong", "justice"],
-        "reframe": "Is life always fair? What would help me accept this situation?"
+        "explanation": "Getting upset because life doesn't feel fair to you.",
+        "reframe_prompt": "Is life always fair? What would help me accept this situation?",
+        "intervention": "Acceptance: Acknowledge the unfairness, then focus on your response."
     },
     "Blaming": {
-        "definition": "Holding others responsible for pain OR blaming ourselves for everything.",
-        "explanation": "Pointing fingers at others or yourself instead of looking at the whole picture.",
-        "example": "Stop making me feel bad! OR This is all my fault.",
         "keywords": ["you made me", "your fault", "my fault", "blame", "responsible", "caused"],
-        "reframe": "Who actually controls my emotions? What part can I influence?"
+        "explanation": "Pointing fingers at others or yourself instead of looking at the whole picture.",
+        "reframe_prompt": "Who actually controls my emotions? What part can I influence?",
+        "intervention": "Ownership Shift: Change 'You made me feel...' to 'I felt... when...'."
     },
     "Shoulds": {
-        "definition": "Ironclad rules about how others/we should behave. Guilt when violated.",
-        "explanation": "Having strict rules about how you or others 'must' act.",
-        "example": "I should exercise. I shouldn't be so lazy.",
         "keywords": ["should", "shouldn't", "must", "ought", "have to", "need to"],
-        "reframe": "What would happen if I dropped this rule? Is it flexible?"
+        "explanation": "Having strict rules about how you or others 'must' act.",
+        "reframe_prompt": "What would happen if I dropped this rule? Is it flexible?",
+        "intervention": "Flexible Thinking: Replace 'should' with 'prefer' or 'would like'."
     },
     "Emotional Reasoning": {
-        "definition": "Believing what we feel must be true automatically. 'I feel it, therefore it's true.'",
-        "explanation": "Thinking your feelings are facts.",
-        "example": "I feel stupid, so I must be stupid.",
         "keywords": ["I feel", "because I feel", "therefore", "must be", "obviously", "clearly"],
-        "reframe": "Are feelings facts? What evidence contradicts this feeling?"
+        "explanation": "Thinking your feelings are facts.",
+        "reframe_prompt": "Are feelings facts? What evidence contradicts this feeling?",
+        "intervention": "Fact vs. Feeling: Write down the feeling, then list 3 facts that contradict it."
     },
     "Fallacy of Change": {
-        "definition": "Expecting others to change if we pressure them enough. Happiness depends on them.",
-        "explanation": "Thinking you can force someone to change if you push hard enough.",
-        "example": "If I just push hard enough, they'll change.",
         "keywords": ["if they would", "if only they", "change them", "make them", "pressure"],
-        "reframe": "Can I control their change? What can I control about my response?"
+        "explanation": "Thinking you can force someone to change if you push hard enough.",
+        "reframe_prompt": "Can I control their change? What can I control about my response?",
+        "intervention": "Boundaries: Focus on your boundaries and reactions, not changing others."
     },
     "Global Labeling": {
-        "definition": "Generalizing one/two qualities into a negative global judgment. Mislabeling.",
-        "explanation": "Calling yourself or others a negative label like 'loser' or 'jerk'.",
-        "example": "I'm a loser. He's a real jerk.",
         "keywords": ["loser", "jerk", "idiot", "worthless", "useless", "disappointment", "stupid"],
-        "reframe": "Can I describe this more specifically without the label?"
+        "explanation": "Calling yourself or others a negative label like 'loser' or 'jerk'.",
+        "reframe_prompt": "Can I describe this more specifically without the label?",
+        "intervention": "Specificity: Describe the behavior, not the person. 'I made a mistake' vs 'I am a loser'."
     },
     "Always Being Right": {
-        "definition": "Continually on trial to prove opinions/actions correct. Being wrong is unthinkable.",
-        "explanation": "Needing to win every argument to feel okay.",
-        "example": "I'm going to win this argument no matter what.",
         "keywords": ["right", "wrong", "prove", "correct", "argument", "win", "defend"],
-        "reframe": "Is being right more important than the relationship?"
+        "explanation": "Needing to win every argument to feel okay.",
+        "reframe_prompt": "Is being right more important than the relationship?",
+        "intervention": "Connection over Correction: Ask yourself: 'Do I want to be right, or do I want to connect?'."
     },
     "Heaven's Reward Fallacy": {
-        "definition": "Expecting sacrifices to be rewarded. Resentment when they aren't.",
-        "explanation": "Feeling bitter because your hard work hasn't been recognized yet.",
-        "example": "I've done so much, I deserve recognition.",
         "keywords": ["deserve", "reward", "sacrifice", "earned", "owed", "after all I've done"],
-        "reframe": "Can I find satisfaction in the action itself, not the reward?"
+        "explanation": "Feeling bitter because your hard work hasn't been recognized yet.",
+        "reframe_prompt": "Can I find satisfaction in the action itself, not the reward?",
+        "intervention": "Intrinsic Value: List 3 reasons why doing this task was valuable regardless of recognition."
     }
 }
 
-# --- EMOTIONS QUICK-SELECT ---
-EMOTIONS = [
-    {"emoji": "😰", "label": "Anxious"},
-    {"emoji": "😢", "label": "Sad"},
-    {"emoji": "😠", "label": "Angry"},
-    {"emoji": "😶", "label": "Numb"},
-    {"emoji": "😔", "label": "Guilty"},
-    {"emoji": "😨", "label": "Scared"},
-    {"emoji": "😤", "label": "Frustrated"},
-    {"emoji": "😞", "label": "Disappointed"},
-    {"emoji": "😐", "label": "Neutral"},
-    {"emoji": "😌", "label": "Calm"}
-]
-
-# --- SAFETY KEYWORDS (Updated for Intent Detection) ---
+# Safety Phrases
 SELF_HARM_PHRASES = [
     "want to kill myself", "want to die", "going to kill myself", "going to die",
     "end my life", "end it all", "suicide", "commit suicide", "take my own life",
@@ -272,296 +184,180 @@ SELF_HARM_PHRASES = [
 INTENT_INDICATORS = ["want to", "going to", "planning to", "thinking about", "ready to", "about to"]
 DEATH_WORDS = ["kill", "die", "dead", "end it", "suicide", "overdose", "hurt myself"]
 
+# --- HELPER FUNCTIONS ---
+
 def check_safety(text):
     text_lower = text.lower()
-    
-    # 1. Check for explicit self-harm phrases first
     for phrase in SELF_HARM_PHRASES:
         if phrase in text_lower:
             return True
-            
-    # 2. Contextual check: Look for intent indicators + death/harm words
     has_intent = any(ind in text_lower for ind in INTENT_INDICATORS)
     has_harm_word = any(word in text_lower for word in DEATH_WORDS)
-    
     if has_intent and has_harm_word:
         return True
-        
     return False
 
-def classify_distortion_auto(text):
+def detect_distortion(text):
     text_lower = text.lower()
     scores = {}
     for dist_name, dist_data in COGNITIVE_DISTORTIONS.items():
         matches = sum(1 for kw in dist_data["keywords"] if kw in text_lower)
-        scores[dist_name] = matches
-    if max(scores.values()) == 0:
-        return "None Identified"
-    return max(scores, key=scores.get)
+        if matches > 0:
+            scores[dist_name] = matches
+    
+    if not scores:
+        return None, None
+    
+    # Return the highest scoring distortion
+    best_match = max(scores, key=scores.get)
+    return best_match, COGNITIVE_DISTORTIONS[best_match]
+
+def estimate_distress(text):
+    # Simple heuristic for distress level based on intensity words
+    intensity_words = ["terrible", "awful", "horrible", "worst", "devastating", "unbearable", "panic", "anxiety", "rage"]
+    score = 5 # Default neutral
+    for word in intensity_words:
+        if word in text.lower():
+            score += 1
+    return min(score, 10)
+
+def generate_response(user_text, session_state):
+    """
+    Agentic Logic: Analyzes input and generates a CBT-guided response.
+    """
+    response_parts = []
+    
+    # 1. Safety Check
+    if check_safety(user_text):
+        return "⚠️ **Safety Alert**: I hear you are in crisis. Please call 988 or go to the ER immediately. I am here to listen, but professional help is needed right now."
+
+    # 2. Distortion Detection
+    detected_dist, dist_data = detect_distortion(user_text)
+    
+    # 3. Distress Estimation
+    distress_level = estimate_distress(user_text)
+    
+    # 4. Build Response
+    if not session_state.get('situation'):
+        # Phase 1: Establishing the Situation
+        session_state['situation'] = user_text
+        response_parts.append("Thanks for sharing that. I hear you're dealing with **[Situation]**.")
+        
+        if detected_dist:
+            response_parts.append(f"I notice you might be experiencing **{detected_dist}** ({dist_data['explanation']}).")
+        
+        response_parts.append("How are you feeling right now about this? (e.g., Anxious, Angry, Sad)")
+        
+    elif not session_state.get('emotion'):
+        # Phase 2: Identifying Emotion
+        session_state['emotion'] = user_text
+        response_parts.append(f"Got it. You're feeling **{user_text}**.")
+        
+        if distress_level >= 7:
+            response_parts.append(f"Your distress seems high ({distress_level}/10). Before we dive deeper, let's try a quick **Box Breathing** exercise to calm your nervous system:")
+            response_parts.append("🫁 **Box Breathing**: Inhale for 4s, Hold for 4s, Exhale for 4s, Hold for 4s. Repeat 3 times.")
+            response_parts.append("Take a moment. When you're ready, tell me: What's the most unhelpful thought running through your mind right now?")
+        else:
+            response_parts.append("Now, what's the specific thought or belief you have about this situation?")
+
+    elif not session_state.get('distortion'):
+        # Phase 3: Challenging the Thought
+        session_state['thought'] = user_text
+        detected_dist, dist_data = detect_distortion(user_text)
+        
+        if detected_dist:
+            session_state['distortion'] = detected_dist
+            response_parts.append(f"That sounds like **{detected_dist}**.")
+            response_parts.append(f"**Why?** {dist_data['explanation']}")
+            response_parts.append(f"**Challenge:** {dist_data['reframe_prompt']}")
+            response_parts.append(f"**Intervention:** Try the **{dist_data['intervention']}** technique.")
+        else:
+            response_parts.append("That's an interesting thought. Let's examine it.")
+            response_parts.append("Is there any evidence that contradicts this thought? Or is there another way to look at it?")
+
+    elif not session_state.get('reframe'):
+        # Phase 4: Reframing
+        session_state['reframe'] = user_text
+        response_parts.append("Great work. That's a much more balanced perspective.")
+        response_parts.append(f"**New Thought:** '{user_text}'")
+        response_parts.append("How does your distress level feel now compared to the beginning? (0-10)")
+        
+    else:
+        # Phase 5: Closing
+        try:
+            final_distress = int(user_text.split()[0]) if user_text.split()[0].isdigit() else 5
+        except:
+            final_distress = 5
+        
+        initial_distress = estimate_distress(session_state.get('situation', ''))
+        delta = initial_distress - final_distress
+        
+        response_parts.append("Session Complete! 🎉")
+        response_parts.append(f"**Summary:**")
+        response_parts.append(f"- Situation: {session_state['situation'][:40]}...")
+        response_parts.append(f"- Emotion: {session_state['emotion']}")
+        response_parts.append(f"- Distortion: {session_state.get('distortion', 'None')}")
+        response_parts.append(f"- New Thought: {session_state['reframe'][:40]}...")
+        response_parts.append(f"- Distress: {initial_distress} → {final_distress} ({'Improved' if delta > 0 else 'Same/Changed'})")
+        response_parts.append("Would you like to start a new session?")
+        
+        # Reset state for next session
+        for key in ['situation', 'emotion', 'distortion', 'thought', 'reframe']:
+            session_state.pop(key, None)
+
+    return "\n\n".join(response_parts)
 
 # --- SESSION STATE INITIALIZATION ---
-if 'session_started' not in st.session_state:
-    st.session_state.session_started = False
-if 'user_id' not in st.session_state:
-    st.session_state.user_id = None
-if 'consent_given' not in st.session_state:
-    st.session_state.consent_given = False
-if 'step' not in st.session_state:
-    st.session_state.step = "landing"
-if 'situation' not in st.session_state:
-    st.session_state.situation = ""
-if 'emotion' not in st.session_state:
-    st.session_state.emotion = ""
-if 'distortion' not in st.session_state:
-    st.session_state.distortion = ""
-if 'reframe' not in st.session_state:
-    st.session_state.reframe = ""
-if 'distress_pre' not in st.session_state:
-    st.session_state.distress_pre = None
-if 'distress_post' not in st.session_state:
-    st.session_state.distress_post = None
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-if 'current_dist_selection' not in st.session_state:
-    st.session_state.current_dist_selection = None
+if 'session_active' not in st.session_state:
+    st.session_state.session_active = False
 
-# --- DISTORTION OPTIONS LIST ---
-DISTORTION_OPTIONS = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
+# --- MAIN APP ---
 
-# --- APP LOGIC ---
+st.title("🧠 ClearLogic Engine")
+st.subheader("Agentic CBT Companion")
 
-def main():
-    # 1. LANDING PAGE
-    if st.session_state.step == "landing":
-        st.title("🧠 ClearLogic Engine")
-        st.subheader("Cognitive Behavioral Therapy (CBT) Support Tool")
-        
-        st.markdown("""
-        ### What is CBT?
-        
-        Cognitive Behavioral Therapy helps us identify and change **unhelpful thinking patterns** 
-        that contribute to emotional distress. By recognizing these patterns, we can develop 
-        healthier, more balanced thoughts.
-        
-        ---
-        
-        ### 15 Common Cognitive Distortions
-        
-        """)
-        
-        # Display all 15 distortions in cards
-        cols = st.columns(3)
-        for idx, (dist_name, dist_data) in enumerate(COGNITIVE_DISTORTIONS.items()):
-            col = cols[idx % 3]
-            with col:
-                with st.container():
-                    st.markdown(f"""
-                    <div class="distortion-card">
-                        <strong>{dist_name}</strong><br>
-                        <small>{dist_data['explanation']}</small>
-                    </div>
-                    """, unsafe_allow_html=True)
-        
-        st.divider()
-        st.markdown("### Ready to work through a situation?")
-        
-        uid = st.text_input("Enter Username or Random Number:", placeholder="e.g., User_8472")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Start Session"):
-                if uid:
-                    st.session_state.user_id = f"ID_{hashlib.sha256(uid.encode()).hexdigest()[:8]}"
-                    st.session_state.step = "consent"
-                    st.rerun()
-                else:
-                    st.warning("Please enter an ID.")
-        with col2:
-            if st.button("Learn More About CBT"):
-                st.info("This tool is based on evidence-based CBT principles. Not a replacement for therapy.")
-        
-        return
+# Sidebar for controls
+with st.sidebar:
+    st.header("Controls")
+    if st.button("Reset Session"):
+        st.session_state.messages = []
+        st.session_state.session_active = False
+        for key in ['situation', 'emotion', 'distortion', 'thought', 'reframe']:
+            st.session_state.pop(key, None)
+        st.rerun()
+    
+    st.markdown("---")
+    st.markdown("**How it works:**")
+    st.markdown("1. Describe what's bothering you.")
+    st.markdown("2. Identify your emotion.")
+    st.markdown("3. The AI detects distortions.")
+    st.markdown("4. Practice reframing.")
+    st.markdown("5. Check distress levels.")
 
-    # 2. CONSENT
-    if st.session_state.step == "consent":
-        st.title("Data Consent")
-        st.markdown("""
-        We collect **anonymous** data to validate the tool's effectiveness for underserved populations.
-        
-        - No names or emails stored
-        - Data used for research only
-        - You can delete your data anytime
-        """)
-        
-        if st.checkbox("I consent to anonymous data collection"):
-            st.session_state.consent_given = True
-            st.session_state.step = "situation"
-            st.rerun()
-        return
+# Chat Interface
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    # 3. STEP 1: SITUATION
-    if st.session_state.step == "situation":
-        st.title("Step 1: Describe the Situation")
-        st.markdown("What happened? Describe the event or thought that's bothering you.")
-        
-        situation = st.text_area("Situation:", height=100, placeholder="e.g., I made a mistake at work and my boss noticed...")
-        
-        if st.button("Next: How Do You Feel?"):
-            if situation:
-                if check_safety(situation):
-                    st.error("⚠️ **Safety Alert**: I hear you are in crisis.")
-                    st.markdown("**Call 988 or go to ER immediately.**")
-                    return
-                st.session_state.situation = situation
-                st.session_state.step = "emotion"
-                st.rerun()
-            else:
-                st.warning("Please describe the situation.")
-        return
+# User Input
+if prompt := st.chat_input("Type your message here..."):
+    # Add user message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-    # 4. STEP 2: EMOTION
-    if st.session_state.step == "emotion":
-        st.title("Step 2: Identify Your Emotion")
-        st.markdown("How are you feeling right now? Select one or more:")
-        
-        cols = st.columns(5)
-        selected_emotion = None
-        for idx, emo in enumerate(EMOTIONS):
-            col = cols[idx % 5]
-            with col:
-                if st.button(f"{emo['emoji']} {emo['label']}", key=f"emo_{idx}"):
-                    selected_emotion = emo['label']
-        
-        if selected_emotion:
-            st.session_state.emotion = selected_emotion
-            st.session_state.step = "distortion"
-            st.rerun()
-        return
+    # Generate AI response
+    with st.chat_message("assistant"):
+        response = generate_response(prompt, st.session_state)
+        st.markdown(response)
+    
+    # Add AI message
+    st.session_state.messages.append({"role": "assistant", "content": response})
+    st.rerun()
 
-    # 5. STEP 3: DISTORTION (FIXED: Using st.radio with explanations displayed below)
-    if st.session_state.step == "distortion":
-        st.title("Step 3: Identify the Cognitive Distortion")
-        st.markdown(f"**Situation:** {st.session_state.situation}")
-        st.markdown(f"**Emotion:** {st.session_state.emotion}")
-        
-        # Auto-detect
-        auto_detected = classify_distortion_auto(st.session_state.situation)
-        st.info(f"🤖 Auto-detected: **{auto_detected}**")
-        
-        st.markdown("**Which pattern matches best?**")
-        
-        # Use st.radio for single selection - this is Streamlit-native and won't cause errors
-        selected_dist = st.radio(
-            "Select one:",
-            DISTORTION_OPTIONS,
-            index=0,
-            key="distortion_radio"
-        )
-        
-        # Show explanation for selected option
-        if selected_dist:
-            if selected_dist != "None Identified":
-                dist_data = COGNITIVE_DISTORTIONS[selected_dist]
-                st.markdown(f"""
-                <div class="info-box">
-                    <strong>{selected_dist}</strong><br>
-                    <small>{dist_data['explanation']}</small>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div class="info-box">
-                    <strong>None Identified</strong><br>
-                    <small>No clear cognitive distortion pattern identified</small>
-                </div>
-                """, unsafe_allow_html=True)
-        
-        if st.button("Next: Create Healthier Thought"):
-            if selected_dist:
-                st.session_state.distortion = selected_dist
-                st.session_state.step = "reframe"
-                st.rerun()
-            else:
-                st.warning("Please select a distortion pattern.")
-        return
-
-    # 6. STEP 4: REFRAME
-    if st.session_state.step == "reframe":
-        st.title("Step 4: Create a Healthier Thought")
-        st.markdown(f"**Distortion:** {st.session_state.distortion}")
-        
-        # Show reframe guidance based on distortion
-        if st.session_state.distortion != "None Identified":
-            dist_data = COGNITIVE_DISTORTIONS[st.session_state.distortion]
-            st.markdown(f"""
-            <div class="info-box">
-                <strong>Definition:</strong> {dist_data['definition']}<br>
-                <strong>Example:</strong> {dist_data['example']}<br>
-                <strong>Try asking:</strong> {dist_data['reframe']}
-            </div>
-            """, unsafe_allow_html=True)
-        
-        new_thought = st.text_area("Write a more balanced thought:", height=100, 
-                                    placeholder="e.g., I made a mistake, but I can learn from it...")
-        
-        if st.button("Next: Check-In"):
-            if new_thought:
-                st.session_state.reframe = new_thought
-                st.session_state.step = "checkin"
-                st.rerun()
-            else:
-                st.warning("Please write a healthier thought.")
-        return
-
-    # 7. STEP 5: CHECK-IN
-    if st.session_state.step == "checkin":
-        st.title("Step 5: Check-In")
-        st.markdown("How do you feel now after working through this?")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            pre = st.slider("Distress Before", 0, 10, 8, key="pre_checkin")
-        with col2:
-            post = st.slider("Distress Now", 0, 10, 4, key="post_checkin")
-        
-        if st.button("Complete Session"):
-            st.session_state.distress_pre = pre
-            st.session_state.distress_post = post
-            delta = pre - post
-            
-            # Session Summary
-            st.success(f"✅ Session Complete!")
-            st.markdown(f"""
-            ### Summary
-            - **Situation:** {st.session_state.situation[:50]}...
-            - **Emotion:** {st.session_state.emotion}
-            - **Distortion:** {st.session_state.distortion}
-            - **Healthier Thought:** {st.session_state.reframe[:50]}...
-            - **Distress:** {pre} → {post} (**{-delta} points**)
-            """)
-            
-            # Reset for next session
-            st.session_state.step = "situation"
-            st.session_state.situation = ""
-            st.session_state.emotion = ""
-            st.session_state.distortion = ""
-            st.session_state.reframe = ""
-            st.session_state.distress_pre = None
-            st.session_state.distress_post = None
-            st.session_state.current_dist_selection = None
-            
-            st.rerun()
-        return
-
-    # 8. ADMIN VIEW (Grant Data)
-    with st.expander("🔒 Admin View: Grant Validation Data"):
-        st.markdown("**Simulated T-Test Results**")
-        data = pd.DataFrame({"Pre": [8, 7, 9, 6, 8], "Post": [4, 3, 5, 2, 4]})
-        t_stat, p_val = stats.ttest_rel(data['Pre'], data['Post'])
-        st.metric("Avg Reduction", f"{data['Pre'].mean() - data['Post'].mean():.1f}")
-        st.metric("Significance (p-value)", f"{p_val:.4f}")
-        if p_val < 0.05:
-            st.success("✅ Statistically Significant Improvement")
-
-if __name__ == "__main__":
-    main()
+# Initial Greeting if empty
+if not st.session_state.messages:
+    with st.chat_message("assistant"):
+        st.markdown("Hello! I'm your ClearLogic CBT companion. 🧠\n\nI can help you identify unhelpful thinking patterns and find more balanced perspectives.\n\n**To start:** Tell me about a situation that's bothering you right now.")
