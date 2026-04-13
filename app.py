@@ -19,6 +19,14 @@ st.markdown("""
     .stButton>button { background-color: #64ffda !important; color: #0a192f !important; font-weight: bold; font-size: 16px; }
     .stButton>button:hover { background-color: #4cc9ac !important; }
     .stTextInput input, .stTextArea textarea { color: #ffffff !important; background-color: #112240 !important; }
+    .stSelectbox select {
+        color: #ffffff !important;
+        background-color: #112240 !important;
+        border: 2px solid #64ffda !important;
+    }
+    .stSelectbox label {
+        color: #ffffff !important;
+    }
     .stSlider label { color: #ffffff !important; }
     .stSuccess { color: #64ffda !important; background-color: #112240 !important; }
     .stError { color: #ff6b6b !important; background-color: #112240 !important; }
