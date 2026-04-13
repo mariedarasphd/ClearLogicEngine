@@ -219,41 +219,31 @@ def estimate_distress(text):
             score += 1
     return min(score, 10)
 
-def get_current_phase(session_state):
-    """
-    Determine which phase of CBT we're in based on session state.
-    Returns: 0=start, 1=situation, 2=emotion, 3=thought, 4=challenge, 5=reframe, 6=complete
-    """
-    if not session_state.get('situation'):
-        return 0  # Start
-    elif not session_state.get('emotion'):
-        return 1  # Situation collected, waiting for emotion
-    elif not session_state.get('thought'):
-        return 2  # Emotion collected, waiting for automatic thought
-    elif not session_state.get('distortion'):
-        return 3  # Thought collected, analyzing distortion
-    elif not session_state.get('reframe'):
-        return 4  # Distortion identified, waiting for reframe attempt
-    elif not session_state.get('final_distress'):
-        return 5  # Reframe collected, waiting for distress check
-    else:
-        return 6  # Complete
+def reset_session(session_state):
+    """Safely reset all session keys"""
+    keys_to_reset = ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress', 'waiting_for_reframe']
+    for key in keys_to_reset:
+        session_state.pop(key, None)
 
 def generate_response(user_text, session_state):
     """
     Agentic Logic: Analyzes input and generates a CBT-guided response.
-    Uses phase-based state machine to avoid loops.
+    Uses explicit phase tracking to avoid loops and KeyError.
     """
     response_parts = []
-    current_phase = get_current_phase(session_state)
     
     # 1. Safety Check (always first)
     if check_safety(user_text):
         return "⚠️ **Safety Alert**: I hear you are in crisis. Please call 988 or go to the ER immediately. I am here to listen, but professional help is needed right now."
 
-    # 2. Phase-Based Response Logic
-    if current_phase == 0:
-        # START: Collect situation
+    # 2. Check if user wants to start fresh
+    if user_text.lower().strip() in ['start new', 'new session', 'restart', 'reset']:
+        reset_session(session_state)
+        return "Great! Let's start fresh. Tell me about a new situation that's bothering you."
+
+    # 3. Phase-Based Response Logic
+    # PHASE 0: No situation yet - collect it
+    if not session_state.get('situation'):
         session_state['situation'] = user_text
         response_parts.append(f"Thanks for sharing that. I hear you're dealing with this situation.")
         
@@ -262,9 +252,10 @@ def generate_response(user_text, session_state):
             response_parts.append(f"I notice you might be experiencing **{detected_dist}** ({dist_data['explanation']}).")
         
         response_parts.append("How are you feeling right now about this? (e.g., Anxious, Angry, Sad, Frustrated)")
-        
-    elif current_phase == 1:
-        # EMOTION: Collect emotion
+        return "\n\n".join(response_parts)
+
+    # PHASE 1: Have situation, collect emotion
+    if not session_state.get('emotion'):
         session_state['emotion'] = user_text
         response_parts.append(f"Got it. You're feeling **{user_text}**.")
         
@@ -275,9 +266,10 @@ def generate_response(user_text, session_state):
             response_parts.append("Take a moment. When ready, what's the **automatic thought** running through your mind about this situation?")
         else:
             response_parts.append("Now, what's the **automatic thought** or belief you have about this situation?")
-        
-    elif current_phase == 2:
-        # THOUGHT: Collect the automatic thought
+        return "\n\n".join(response_parts)
+
+    # PHASE 2: Have situation + emotion, collect automatic thought
+    if not session_state.get('thought'):
         session_state['thought'] = user_text
         detected_dist, dist_data = detect_distortion(user_text)
         
@@ -287,22 +279,26 @@ def generate_response(user_text, session_state):
             response_parts.append(f"**Why?** {dist_data['explanation']}")
             response_parts.append(f"**Challenge Question:** {dist_data['reframe_prompt']}")
             response_parts.append(f"**Try this intervention:** {dist_data['intervention']}")
-            response_parts.append("Now, write a **more balanced thought** that challenges this distortion.")
         else:
             session_state['distortion'] = "None Identified"
             response_parts.append("That's an interesting thought. Let's examine it more closely.")
             response_parts.append("Is there any evidence that contradicts this thought? Or is there another way to look at it?")
-            response_parts.append("Try writing a more balanced version of this thought.")
         
-    elif current_phase == 3:
-        # CHALLENGE/REFRAME: User is providing their reframe attempt
+        response_parts.append("Now, write a **more balanced thought** that challenges this distortion.")
+        session_state['waiting_for_reframe'] = True
+        return "\n\n".join(response_parts)
+
+    # PHASE 3: Have situation + emotion + thought + distortion, waiting for reframe
+    if session_state.get('waiting_for_reframe') and not session_state.get('reframe'):
         session_state['reframe'] = user_text
+        session_state['waiting_for_reframe'] = False
         response_parts.append("Great work! That's a much more balanced perspective.")
         response_parts.append(f"**New Balanced Thought:** '{user_text}'")
         response_parts.append("How does your distress level feel **now** compared to the beginning? (Rate 0-10)")
-        
-    elif current_phase == 4:
-        # FINAL DISTRESS: User provides final distress rating
+        return "\n\n".join(response_parts)
+
+    # PHASE 4: Have all data, waiting for final distress rating
+    if session_state.get('reframe') and not session_state.get('final_distress'):
         try:
             final_distress = int(user_text.split()[0]) if user_text.split() and user_text.split()[0].isdigit() else 5
         except:
@@ -314,37 +310,32 @@ def generate_response(user_text, session_state):
         
         response_parts.append("🎉 **Session Complete!**")
         response_parts.append(f"**Summary:**")
-        response_parts.append(f"- Situation: {session_state['situation'][:50]}...")
-        response_parts.append(f"- Emotion: {session_state['emotion']}")
-        response_parts.append(f"- Automatic Thought: {session_state['thought'][:50]}...")
+        response_parts.append(f"- Situation: {session_state.get('situation', '')[:50]}...")
+        response_parts.append(f"- Emotion: {session_state.get('emotion', '')}")
+        response_parts.append(f"- Automatic Thought: {session_state.get('thought', '')[:50]}...")
         response_parts.append(f"- Distortion: {session_state.get('distortion', 'None')}")
-        response_parts.append(f"- Balanced Thought: {session_state['reframe'][:50]}...")
+        response_parts.append(f"- Balanced Thought: {session_state.get('reframe', '')[:50]}...")
         response_parts.append(f"- Distress: {initial_distress} → {final_distress} ({'Improved!' if delta > 0 else 'Same/Changed'})")
         response_parts.append("")
         response_parts.append("Would you like to start a **new session**? Just describe a new situation when you're ready.")
         
-        # Reset state for next session
-        for key in ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress']:
-            session_state.pop(key, None)
-        
-    elif current_phase == 5:
-        # COMPLETE: User wants to start fresh
+        # Reset for next session
+        reset_session(session_state)
+        return "\n\n".join(response_parts)
+
+    # PHASE 5: Session complete, user wants to start fresh
+    if session_state.get('final_distress'):
         response_parts.append("Great! Let's start fresh.")
         response_parts.append("Tell me about a new situation that's bothering you.")
-        session_state.pop('situation', None)
-        session_state.pop('emotion', None)
-        session_state.pop('thought', None)
-        session_state.pop('distortion', None)
-        session_state.pop('reframe', None)
-        session_state.pop('final_distress', None)
-    
-    return "\n\n".join(response_parts)
+        reset_session(session_state)
+        return "\n\n".join(response_parts)
+
+    # Fallback (shouldn't reach here)
+    return "I'm here to help. Could you tell me more about what's on your mind?"
 
 # --- SESSION STATE INITIALIZATION ---
 if 'messages' not in st.session_state:
     st.session_state.messages = []
-if 'session_active' not in st.session_state:
-    st.session_state.session_active = False
 
 # --- MAIN APP ---
 
@@ -356,8 +347,7 @@ with st.sidebar:
     st.header("Controls")
     if st.button("Reset Session"):
         st.session_state.messages = []
-        for key in ['situation', 'emotion', 'thought', 'distortion', 'reframe', 'final_distress']:
-            st.session_state.pop(key, None)
+        reset_session(st.session_state)
         st.rerun()
     
     st.markdown("---")
