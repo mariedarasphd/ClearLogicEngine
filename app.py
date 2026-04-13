@@ -5,288 +5,305 @@ from scipy import stats
 import hashlib
 import uuid
 import datetime
+import os
 
-# --- CONFIGURATION & CONSTANTS ---
-st.set_page_config(page_title="ClearLogic Engine", page_icon="🧠", layout="centered")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="ClearLogic Engine", 
+    page_icon="🧠", 
+    layout="centered",
+    initial_sidebar_state="collapsed"
+)
 
-# Safety Keywords (Hard Stop)
-SAFETY_KEYWORDS = [
-    "suicide", "kill myself", "end it", "die", "overdose", 
-    "hurt someone", "firearm", "gun", "cutting", "self-harm"
-]
+# --- CUSTOM STYLING (Dark Navy Theme) ---
+st.markdown("""
+<style>
+    /* Main Background */
+    .stApp {
+        background-color: #0a192f; /* Dark Navy */
+        color: #ffffff;
+    }
+    /* Headers */
+    h1, h2, h3 {
+        color: #ffffff !important;
+    }
+    /* Buttons */
+    .stButton>button {
+        background-color: #64ffda;
+        color: #0a192f;
+        border: none;
+        font-weight: bold;
+    }
+    .stButton>button:hover {
+        background-color: #4cc9ac;
+    }
+    /* Chat Messages */
+    .stChatMessage {
+        background-color: #112240;
+        border-radius: 10px;
+        padding: 10px;
+    }
+    .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
+        background-color: #172a45;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-# BDI Short Form Items (Sample 5 items for MVP)
-BDI_ITEMS = [
-    {"id": 1, "text": "Sadness", "options": ["0-No sadness", "1-Mild", "2-Moderate", "3-Severe"]},
-    {"id": 2, "text": "Pessimism", "options": ["0-No pessimism", "1-Mild", "2-Moderate", "3-Severe"]},
-    {"id": 3, "text": "Failure", "options": ["0-No feeling of failure", "1-Mild", "2-Moderate", "3-Severe"]},
-    {"id": 4, "text": "Loss of Pleasure", "options": ["0-No loss", "1-Mild", "2-Moderate", "3-Severe"]},
-    {"id": 5, "text": "Guilt", "options": ["0-No guilt", "1-Mild", "2-Moderate", "3-Severe"]}
-]
+# --- ASSET LOADING ---
+# Check if logo exists
+LOGO_PATH = "logo.png"
+if os.path.exists(LOGO_PATH):
+    st.image(LOGO_PATH, width=200)
+else:
+    st.warning("⚠️ Logo not found. Please ensure 'logo.png' is in the same folder.")
 
-# Skill Library (State -> Skill -> Script)
-SKILL_LIBRARY = {
-    "panic": {
-        "skill": "Box Breathing",
-        "script": "Let's slow down. Inhale for 4 seconds, hold for 4, exhale for 4, hold for 4. Repeat 3 times.",
-        "instruction": "Try this now. How does your body feel?"
+# --- DATASET DERIVED RULES ---
+# Based on your provided dataset
+DISTORTION_KEYWORDS = {
+    "Catastrophizing": [
+        "gonna be able to", "things are just gonna get worse", "lose my job", 
+        "go to jail", "something bad will happen", "worst case", "never", 
+        "forever", "run out for rent", "credit score going down", "stuck"
+    ],
+    "Global Labelling": [
+        "worthless", "disappointment", "useless", "no friends at all", 
+        "I'm a", "I'm so", "I'm not as good", "I have no friends", "doing nothing"
+    ],
+    "Mindreading": [
+        "they'll think", "people might not like me", "they don't want", 
+        "they're telling me", "they don't understand", "they'll say no", 
+        "feel like people are not wanting"
+    ],
+    "Emotional Reasoning": [
+        "I feel", "because I feel", "therefore something bad", "I hate it", 
+        "I'm worried therefore", "it's just something to procrastinate", "I just think"
+    ],
+    "Shoulds": [
+        "I should", "I need to", "I have to", "should be", "I should carry on"
+    ],
+    "Personalization": [
+        "depends on me", "everything depends", "my fault", "I have to cater"
+    ],
+    "Overgeneralization": [
+        "always", "never", "every time", "keep happening", "get sidetracked", 
+        "tomorrow doesn't happen", "same thing happens"
+    ],
+    "Control Fallacies": [
+        "I'm not safe if I don't", "have to buy things", "something bad will happen if I don't"
+    ]
+}
+
+INTERVENTION_SKILLS = {
+    "Catastrophizing": {
+        "name": "Probability Reframe",
+        "script": "Let's look at the probability. Is this outcome 100% certain, or is it just a fear? What is a more realistic outcome?",
+        "action": "Ask for evidence of the worst-case scenario vs. a neutral one."
     },
-    "rumination": {
-        "skill": "Evidence Check",
-        "script": "Your brain is telling a story. Let's look for facts. What is one piece of evidence that contradicts that thought?",
-        "instruction": "Write down one fact that proves the thought isn't 100% true."
+    "Global Labelling": {
+        "name": "Reality Check",
+        "script": "Labels like 'worthless' are broad. Can we break this down? Is there one specific thing that went wrong, or is it everything?",
+        "action": "Identify one specific exception to the label."
     },
-    "overwhelm": {
-        "skill": "5-4-3-2-1 Grounding",
-        "script": "Name 5 things you see, 4 things you can touch, 3 things you hear, 2 things you smell, 1 thing you taste.",
-        "instruction": "Go through the list slowly."
+    "Mindreading": {
+        "name": "Reality Check",
+        "script": "We can't read minds. What is the actual evidence that they think that? Or is it possible they are just busy?",
+        "action": "List 3 alternative explanations for their behavior."
     },
-    "numb": {
-        "skill": "Temperature Shift",
-        "script": "Sometimes we need a physical reset. Splash cold water on your face or hold an ice cube for 10 seconds.",
-        "instruction": "Notice the sensation. Does it bring you back to the present?"
+    "Emotional Reasoning": {
+        "name": "Emotional Regulation",
+        "script": "Feelings are real, but they aren't facts. Just because you feel it doesn't mean it's true. Let's pause and breathe.",
+        "action": "Practice 1 minute of deep breathing before reacting."
+    },
+    "Shoulds": {
+        "name": "Reality Check",
+        "script": "'Shoulds' create pressure. What would happen if you didn't do it? Is there a more flexible way to look at this?",
+        "action": "Replace 'I should' with 'I prefer' or 'I would like to'."
+    },
+    "Personalization": {
+        "name": "Emotional Regulation",
+        "script": "You are taking responsibility for things outside your control. What part of this was actually yours?",
+        "action": "Draw a circle: Inside is 'My Control', Outside is 'Not My Control'."
+    },
+    "Overgeneralization": {
+        "name": "Behavioral Activation",
+        "script": "One bad event doesn't mean 'always'. Let's look at a time this didn't happen.",
+        "action": "Recall one specific instance where the opposite was true."
+    },
+    "Control Fallacies": {
+        "name": "Probability Reframe",
+        "script": "Trying to control everything causes anxiety. What is one small thing you can control right now?",
+        "action": "Focus on one immediate, actionable step."
     }
 }
 
 # --- HELPER FUNCTIONS ---
 
 def generate_anonymous_id():
-    """Generates a unique, non-identifying ID."""
     return str(uuid.uuid4())[:8]
 
 def check_safety(text):
-    """Returns True if safety keywords are found."""
+    safety_keywords = [
+        "suicide", "kill myself", "end it", "die", "overdose", 
+        "hurt someone", "firearm", "gun", "cutting", "self-harm"
+    ]
     text_lower = text.lower()
-    return any(keyword in text_lower for keyword in SAFETY_KEYWORDS)
+    return any(keyword in text_lower for keyword in safety_keywords)
 
-def classify_state(text):
-    """Simple rule-based classifier for MVP."""
+def classify_distortion(text):
+    """Matches user text against your dataset keywords."""
     text_lower = text.lower()
-    if "can't breathe" in text_lower or "panic" in text_lower or "heart racing" in text_lower:
-        return "panic"
-    if "always" in text_lower or "never" in text_lower or "stupid" in text_lower:
-        return "rumination"
-    if "too much" in text_lower or "overwhelmed" in text_lower or "can't cope" in text_lower:
-        return "overwhelm"
-    if "empty" in text_lower or "nothing" in text_lower or "numb" in text_lower:
-        return "numb"
-    return "general"
+    scores = {}
+    
+    for category, keywords in DISTORTION_KEYWORDS.items():
+        matches = sum(1 for kw in keywords if kw in text_lower)
+        scores[category] = matches
+    
+    if max(scores.values()) == 0:
+        return "neutral"
+    
+    return max(scores, key=scores.get)
 
-def calculate_bdi_score(answers):
-    """Calculates total BDI score from selected indices."""
-    return sum(int(a.split('-')[0]) for a in answers if a)
+def get_skill_response(distortion_label):
+    """Returns the skill script based on your dataset's intervention needs."""
+    if distortion_label == "neutral":
+        return {
+            "name": "Grounding",
+            "script": "Let's focus on the present moment. What is one thing you can do right now to feel slightly better?",
+            "action": "Take a deep breath and name one thing you see."
+        }
+    
+    skill_data = INTERVENTION_SKILLS.get(distortion_label, INTERVENTION_SKILLS["Emotional Reasoning"])
+    return skill_data
 
-# --- SESSION STATE INITIALIZATION ---
+# --- SESSION STATE ---
 if 'session_started' not in st.session_state:
     st.session_state.session_started = False
 if 'user_id' not in st.session_state:
     st.session_state.user_id = None
 if 'consent_given' not in st.session_state:
     st.session_state.consent_given = False
-if 'bdi_pre_score' not in st.session_state:
-    st.session_state.bdi_pre_score = None
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
 if 'distress_pre' not in st.session_state:
     st.session_state.distress_pre = None
 if 'distress_post' not in st.session_state:
     st.session_state.distress_post = None
 if 'current_skill' not in st.session_state:
     st.session_state.current_skill = None
-if 'messages' not in st.session_state:
-    st.session_state.messages = []
 
 # --- APP LOGIC ---
 
 def main():
-    st.title("🧠 ClearLogic Engine")
-    st.caption("An anonymous, skill-based cognitive support system.")
-
-    # 1. WELCOME & CONSENT SCREEN
+    # 1. WELCOME SCREEN
     if not st.session_state.session_started:
-        st.header("Welcome")
+        st.title("ClearLogic Engine")
+        st.subheader("Anonymous, Skill-Based Cognitive Support")
+        
         st.markdown("""
-        **ClearLogic Engine** is a tool to help you think through situations and manage distress.
+        - **No Diagnosis:** We focus on skills, not labels.
         - **Anonymous:** No names or personal data required.
-        - **Skill-Based:** Focuses on what you can do *now*, not diagnoses.
-        - **Safe:** Includes immediate crisis support if needed.
+        - **Safe:** Immediate crisis support if needed.
         """)
         
-        st.divider()
-        st.subheader("Step 1: Create Your Anonymous ID")
-        user_input_id = st.text_input("Choose a username OR enter a random number (e.g., 8472):", placeholder="e.g., User_123 or 9921")
+        user_input_id = st.text_input("Enter a Username or Random Number:", placeholder="e.g., User_8472")
         
         if st.button("Start Session"):
             if user_input_id:
-                # Hash the input to ensure no PII is stored even if they type a name
                 hashed_id = hashlib.sha256(user_input_id.encode()).hexdigest()[:8]
                 st.session_state.user_id = f"ID_{hashed_id}"
                 st.session_state.session_started = True
                 st.rerun()
             else:
-                st.warning("Please enter an ID to continue.")
+                st.warning("Please enter an ID.")
         return
 
     # 2. CONSENT SCREEN
     if not st.session_state.consent_given:
-        st.header("Data Consent")
+        st.title("Data Consent")
         st.markdown("""
-        To help us improve this tool and validate its effectiveness, we collect **anonymous** data:
-        - Your anonymous ID
-        - Pre/Post distress scores
-        - Skills used
-        - **NO** names, emails, or personal details are stored.
-        
-        This data is used for research to help underserved populations (veterans, homeless, DV survivors).
+        We collect **anonymous** data to validate the tool's effectiveness for underserved populations.
+        - No names or emails stored.
+        - Data used for research only.
         """)
         
-        if st.checkbox("I consent to anonymous data collection for research purposes"):
+        if st.checkbox("I consent to anonymous data collection"):
             st.session_state.consent_given = True
-            st.rerun()
-        else:
-            st.info("Please consent to proceed.")
-            return
-
-    # 3. BDI INTAKE (PRE-SESSION)
-    if st.session_state.bdi_pre_score is None:
-        st.header("Initial Check-in")
-        st.markdown("Please rate how you've been feeling over the **last 2 weeks**.")
-        
-        bdi_answers = []
-        for item in BDI_ITEMS:
-            selected = st.radio(item['text'], item['options'], key=f"bdi_{item['id']}", horizontal=True)
-            bdi_answers.append(selected)
-        
-        if st.button("Calculate Baseline"):
-            score = calculate_bdi_score(bdi_answers)
-            st.session_state.bdi_pre_score = score
-            st.success(f"Baseline BDI Score: {score}")
             st.rerun()
         return
 
-    # 4. MAIN CHAT INTERFACE
-    st.header("ClearLogic Session")
+    # 3. MAIN CHAT INTERFACE
+    st.title("ClearLogic Session")
     
     # Display History
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
-    # Safety Check & Input
+    # Input
     user_input = st.chat_input("How are you feeling right now?")
 
     if user_input:
-        # Add user message
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
             st.markdown(user_input)
 
-        # --- SAFETY OVERRIDE (HARD STOP) ---
+        # SAFETY CHECK
         if check_safety(user_input):
             with st.chat_message("assistant"):
                 st.error("⚠️ **Safety Alert**: I hear you are in crisis.")
                 st.markdown("""
-                I cannot provide skills right now. Your safety is the priority.
-                
                 **Please reach out for immediate help:**
-                - Call or Text **988** (Suicide & Crisis Lifeline)
-                - Go to your nearest Emergency Room.
-                - You are not alone.
+                - Call or Text **988**
+                - Go to the nearest ER.
                 """)
                 st.session_state.messages.append({"role": "assistant", "content": "CRISIS_TRIGGERED"})
-                return # Stop further processing
+                return
 
-        # --- NORMAL FLOW ---
-        # 1. Classify State
-        state = classify_state(user_input)
+        # CLASSIFY & RESPOND
+        distortion = classify_distortion(user_input)
+        skill = get_skill_response(distortion)
         
-        # 2. Select Skill
-        skill_data = SKILL_LIBRARY.get(state, SKILL_LIBRARY["general"]) if state != "general" else SKILL_LIBRARY["general"]
-        skill_name = skill_data["skill"]
-        skill_script = skill_data["script"]
+        response_text = f"**Detected Pattern:** {distortion}\n\n**Skill:** {skill['name']}\n\n{skill['script']}"
         
-        # 3. Generate Response
-        response = f"I hear you. It sounds like you're dealing with {state}. \n\n**Skill Suggestion:** {skill_name}\n\n{skill_script}"
-        
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.messages.append({"role": "assistant", "content": response_text})
         with st.chat_message("assistant"):
-            st.markdown(response)
+            st.markdown(response_text)
         
-        # Store current skill for post-session
-        st.session_state.current_skill = skill_name
-        
-        # 4. Ask for Pre-Distress (if not already set in this session logic, simplified here)
-        # In a real flow, we might ask this before the skill. For MVP, we ask after interaction.
-        st.session_state.distress_pre = st.slider("Distress Level (Before this skill)", 0, 10, 8, key="pre_slider")
+        st.session_state.current_skill = skill['name']
+        st.session_state.distress_pre = st.slider("Distress Level (Before)", 0, 10, 8, key="pre_slider")
 
-    # 5. POST-SESSION EVALUATION
+    # 4. POST-SESSION
     if st.session_state.distress_pre is not None and st.session_state.distress_post is None:
         st.divider()
         st.subheader("Check-in After Skill")
-        st.markdown(f"You tried **{st.session_state.current_skill}**. How do you feel now?")
-        
         post_val = st.slider("Distress Level (Now)", 0, 10, 4, key="post_slider")
         
-        if st.button("Complete Session & Save Data"):
+        if st.button("Complete Session"):
             st.session_state.distress_post = post_val
+            delta = st.session_state.distress_pre - post_val
             
-            # Log Data (Simulated for Demo)
-            log_entry = {
-                "timestamp": datetime.datetime.now().isoformat(),
-                "user_id": st.session_state.user_id,
-                "bdi_pre": st.session_state.bdi_pre_score,
-                "distress_pre": st.session_state.distress_pre,
-                "skill_used": st.session_state.current_skill,
-                "distress_post": st.session_state.distress_post,
-                "delta": st.session_state.distress_pre - st.session_state.distress_post
-            }
+            st.success(f"Session Complete! Distress reduced by {delta} points.")
             
-            # In production, append to Google Sheets here
-            # st.write("Data saved to database.") 
-            
-            st.success("Session complete! Data saved anonymously.")
-            
-            # Reset for next session (optional)
+            # Reset for next session
             st.session_state.distress_pre = None
             st.session_state.distress_post = None
             st.session_state.current_skill = None
-            st.session_state.messages = [] # Clear chat for fresh start
+            st.session_state.messages = []
             st.rerun()
 
-    # 6. GRANT DASHBOARD (Hidden View)
-    # In a real app, protect this with a password. For demo, we show it at the bottom.
-    with st.expander("🔒 Admin View: Grant Validation Data (Demo Mode)"):
-        st.markdown("**Simulated Dataset for T-Test Validation**")
-        
-        # Create dummy data for demonstration if real data is empty
-        if len(st.session_state.messages) == 0: # Assuming empty means no new data logged yet
-            # Generate fake data for the demo to show the t-test works
-            data = {
-                "distress_pre": [8, 7, 9, 6, 8, 7, 9, 8, 7, 6],
-                "distress_post": [4, 3, 5, 2, 4, 3, 5, 4, 3, 2]
-            }
-            df = pd.DataFrame(data)
-        else:
-            # In real app, fetch from DB
-            df = pd.DataFrame({
-                "distress_pre": [st.session_state.distress_pre] if st.session_state.distress_pre else [],
-                "distress_post": [st.session_state.distress_post] if st.session_state.distress_post else []
-            })
-
-        if not df.empty and len(df) > 1:
-            # Run Paired T-Test
-            t_stat, p_value = stats.ttest_rel(df['distress_pre'], df['distress_post'])
-            
-            st.metric("Average Distress Reduction", f"{df['distress_pre'].mean() - df['distress_post'].mean():.2f} points")
-            st.metric("Statistical Significance (p-value)", f"{p_value:.4f}")
-            
-            if p_value < 0.05:
-                st.success(f"✅ **Significant Improvement Detected!** (p < 0.05)")
-                st.markdown("The data suggests the ClearLogic Engine effectively reduces distress.")
-            else:
-                st.info("Sample size too small for statistical significance yet. More data needed.")
-            
-            st.line_chart(df)
-        else:
-            st.info("Collecting session data... (Need at least 2 sessions for t-test)")
+    # 5. ADMIN VIEW (Demo Data)
+    with st.expander("🔒 Admin View: Grant Validation Data"):
+        st.markdown("**Simulated T-Test Results**")
+        # Simulate data for demo
+        data = pd.DataFrame({
+            "Pre": [8, 7, 9, 6, 8],
+            "Post": [4, 3, 5, 2, 4]
+        })
+        t_stat, p_val = stats.ttest_rel(data['Pre'], data['Post'])
+        st.metric("Avg Reduction", f"{data['Pre'].mean() - data['Post'].mean():.1f}")
+        st.metric("Significance (p-value)", f"{p_val:.4f}")
+        if p_val < 0.05:
+            st.success("✅ Statistically Significant Improvement")
 
 if __name__ == "__main__":
     main()
