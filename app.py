@@ -52,6 +52,10 @@ st.markdown("""
         border: 1px solid #64ffda !important;
     }
     
+    /* Radio button styling */
+    .stRadio > label { color: #ffffff !important; }
+    .stRadio > div { color: #ffffff !important; }
+    
     /* SELECTBOX FIX */
     .stSelectbox > div > div {
         background-color: #112240 !important;
@@ -85,15 +89,6 @@ st.markdown("""
         color: #ffffff !important;
     }
     
-    /* Additional dropdown targeting */
-    .stSelectbox div[data-testid="stSelectboxOptions"] {
-        background-color: #112240 !important;
-    }
-    .stSelectbox div[data-testid="stSelectboxOptions"] li {
-        background-color: #112240 !important;
-        color: #ffffff !important;
-    }
-    
     /* Sliders */
     .stSlider label { color: #ffffff !important; }
     
@@ -123,11 +118,6 @@ st.markdown("""
         border-left: 3px solid #64ffda;
         background-color: #112240;
         border-radius: 4px;
-        transition: all 0.2s;
-    }
-    .distortion-option.selected {
-        background-color: #1d3557;
-        border-left: 3px solid #64ffda;
     }
     .debug-box { 
         background-color: #233554; 
@@ -335,12 +325,8 @@ if 'messages' not in st.session_state:
 if 'current_dist_selection' not in st.session_state:
     st.session_state.current_dist_selection = None
 
-# Initialize all distortion checkbox keys to False to prevent dynamic key errors
+# --- DISTORTION OPTIONS LIST ---
 DISTORTION_OPTIONS = ["None Identified"] + list(COGNITIVE_DISTORTIONS.keys())
-for opt in DISTORTION_OPTIONS:
-    key = f"cb_{opt}"
-    if key not in st.session_state:
-        st.session_state[key] = False
 
 # --- APP LOGIC ---
 
@@ -452,7 +438,7 @@ def main():
             st.rerun()
         return
 
-    # 5. STEP 3: DISTORTION (FIXED: Safe Checkbox Logic)
+    # 5. STEP 3: DISTORTION (FIXED: Using st.radio with explanations displayed below)
     if st.session_state.step == "distortion":
         st.title("Step 3: Identify the Cognitive Distortion")
         st.markdown(f"**Situation:** {st.session_state.situation}")
@@ -462,74 +448,37 @@ def main():
         auto_detected = classify_distortion_auto(st.session_state.situation)
         st.info(f"🤖 Auto-detected: **{auto_detected}**")
         
-        st.markdown("**Which pattern matches best? (Select one)**")
+        st.markdown("**Which pattern matches best?**")
         
-        selected_dist = None
+        # Use st.radio for single selection - this is Streamlit-native and won't cause errors
+        selected_dist = st.radio(
+            "Select one:",
+            DISTORTION_OPTIONS,
+            index=0,
+            key="distortion_radio"
+        )
         
-        # Render options
-        for i, dist_name in enumerate(DISTORTION_OPTIONS):
-            # Determine explanation
-            if dist_name == "None Identified":
-                explanation = "No clear cognitive distortion pattern identified"
-            else:
-                explanation = COGNITIVE_DISTORTIONS[dist_name]["explanation"]
-            
-            # Unique key for this checkbox
-            cb_key = f"cb_{dist_name}"
-            
-            # Layout: Checkbox on left, Explanation on right
-            col1, col2 = st.columns([0.5, 5.5])
-            
-            with col1:
-                # Get current state
-                current_val = st.session_state.get(cb_key, False)
-                
-                # If this checkbox is clicked, we need to deselect all others
-                # We do this by checking if it's currently unchecked and the user clicks it
-                # But Streamlit re-renders, so we use a callback-like pattern via session state logic
-                
-                # Simple approach: If the user clicks this checkbox, we set it to True and others to False
-                # However, we can't do that inside the render loop easily without causing errors.
-                # Instead, we use a helper: if the user clicks, we set a temporary 'clicked_key'
-                # and then process it after the loop.
-                
-                # Actually, the cleanest way in Streamlit for single-select checkboxes is:
-                # Check if this specific box is checked. If so, set current_dist_selection to this name.
-                # Then, in the next render, we ensure only this one is checked.
-                
-                # To avoid the "dynamic key" error, we rely on the fact that we initialized all keys above.
-                
-                is_checked = st.checkbox("", key=cb_key, value=current_val)
-                
-                if is_checked:
-                    # If this one is checked, set it as the selection
-                    st.session_state.current_dist_selection = dist_name
-                    
-                    # IMPORTANT: We must uncheck all OTHER boxes immediately in the same run
-                    # But we can't modify session_state keys dynamically in a loop that is currently rendering?
-                    # Actually, we can if we iterate the known list.
-                    for opt in DISTORTION_OPTIONS:
-                        if opt != dist_name:
-                            st.session_state[f"cb_{opt}"] = False
-                    # Force a rerun to update the UI state cleanly
-                    st.rerun()
-
-            with col2:
-                # Visual feedback
-                is_selected = (st.session_state.current_dist_selection == dist_name)
-                bg_color = "#1d3557" if is_selected else "#112240"
-                border_color = "#64ffda" if is_selected else "#233554"
-                
+        # Show explanation for selected option
+        if selected_dist:
+            if selected_dist != "None Identified":
+                dist_data = COGNITIVE_DISTORTIONS[selected_dist]
                 st.markdown(f"""
-                <div class="distortion-option {'selected' if is_selected else ''}" style="background-color: {bg_color}; border-left-color: {border_color};">
-                    <strong>{dist_name}</strong><br>
-                    <small style="color: #8892b0;">{explanation}</small>
+                <div class="info-box">
+                    <strong>{selected_dist}</strong><br>
+                    <small>{dist_data['explanation']}</small>
                 </div>
                 """, unsafe_allow_html=True)
-
+            else:
+                st.markdown("""
+                <div class="info-box">
+                    <strong>None Identified</strong><br>
+                    <small>No clear cognitive distortion pattern identified</small>
+                </div>
+                """, unsafe_allow_html=True)
+        
         if st.button("Next: Create Healthier Thought"):
-            if st.session_state.current_dist_selection:
-                st.session_state.distortion = st.session_state.current_dist_selection
+            if selected_dist:
+                st.session_state.distortion = selected_dist
                 st.session_state.step = "reframe"
                 st.rerun()
             else:
@@ -600,10 +549,6 @@ def main():
             st.session_state.distress_pre = None
             st.session_state.distress_post = None
             st.session_state.current_dist_selection = None
-            
-            # Reset all checkboxes
-            for opt in DISTORTION_OPTIONS:
-                st.session_state[f"cb_{opt}"] = False
             
             st.rerun()
         return
