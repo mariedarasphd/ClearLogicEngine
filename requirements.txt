@@ -1,4 +1,1 @@
-streamlit
-pandas
-scipy
-numpy
+gradio==6.5.1
